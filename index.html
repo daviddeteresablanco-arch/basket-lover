@@ -2544,9 +2544,14 @@ function syApply(){SY.pending=false;const cur=syDocs();const next=Object.assign(
   const keepRoute=route();S=migrate(N);S_SEEDED=false;try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}
   if(typeof pzReset==='function'&&keepRoute!=='pizarra')try{pzReset()}catch(e){}
   render();syPush()}
+/* grupo vacío: nunca enseñar los datos de ejemplo; ofrecer subir la copia */
+function syBlank(){const b=blankTeam('','');TEAM_KEYS.forEach(k=>S[k]=b[k]);S.teamsData={};S.teams=[{id:S.teamId}];try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}if(typeof pzReset==='function')try{pzReset()}catch(e){}render()}
+function syEmptyBanner(on){let el=$('#sy-empty');if(!on||!SB.space){if(el)el.remove();return}if(el)return;el=document.createElement('div');el.id='sy-empty';el.className='cu-msg warn';
+  el.innerHTML='<b>Tu grupo todavía no tiene datos.</b> Si eres quien lo ha creado, sube tu copia (el archivo <code>basket-lover.json</code> de la carpeta Basket Lover\\datos). Si te has unido con un código, espera a que lo haga quien creó el grupo. <label class="btn btn-s btn-p" style="cursor:pointer;margin-top:6px">Subir mi copia<input type="file" accept="application/json,.json" data-chg="bk-import" hidden></label>';
+  const v=$('#view');if(v)v.parentNode.insertBefore(el,v)}
 /* lo que llega de la base de datos: el conjunto completo de documentos */
-function syOnRemote(R,size){SY.remote=R;
-  if(!SY.ready){SY.ready=true;if(!size){if(!S_SEEDED&&!SY.ro){SY.last={};syKeep();syPush()}syStatus(SY.ro?'ro':'ok');return}}
+function syOnRemote(R,size){SY.remote=R;syEmptyBanner(!size);
+  if(!SY.ready){SY.ready=true;if(!size){if(S_SEEDED){syBlank()}else if(!SY.ro){SY.last={};syKeep();syPush()}syStatus(SY.ro?'ro':'ok');return}}
   syStatus(SY.ro?'ro':'ok');if(SH){SY.pending=true;return}syApply()}
 function syStart(B){SY.db=B;SY.ready=false;B.start(syOnRemote,()=>{syStatus('off')})}
 /* --- Claude: base de datos del artifact --- */
@@ -2630,7 +2635,7 @@ window.addEventListener('online',()=>{if(SY.db)syPush()});
 
 /* ---------- APP: copia de seguridad, almacenamiento persistente y modo sin conexión ---------- */
 ACT['bk-export']=()=>{try{const blob=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='basket-lover-copia-'+TODAY+'.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);toast('Copia descargada')}catch(e){toast('No se ha podido descargar la copia')}};
-CHG['bk-import']=el=>{const f=el.files&&el.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d||!d.settings||!Array.isArray(d.matches))throw 0;S=migrate(d);save();closeSheet();render();toast('Copia restaurada')}catch(e){toast('Ese archivo no es una copia de Basket Lover')}};r.readAsText(f)};
+CHG['bk-import']=el=>{const f=el.files&&el.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d||!d.settings||!Array.isArray(d.matches))throw 0;S=migrate(d);S_SEEDED=false;save();closeSheet();render();const be=document.getElementById('sy-empty');if(be)be.remove();toast(typeof SY!=='undefined'&&SY.db?'Copia restaurada: subiendo tus datos al grupo…':'Copia restaurada')}catch(e){toast('Ese archivo no es una copia de Basket Lover')}};r.readAsText(f)};
 ACT['set-empty']=()=>{if(!SET._empty){SET._empty=true;renderSheet();return}const b=blankTeam(S.settings.team,S.settings.category);TEAM_KEYS.filter(k=>k!=='settings').forEach(k=>S[k]=b[k]);save();pzReset();closeSheet();render();toast('Equipo vaciado: empieza a meter tus datos')};
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
 if('serviceWorker' in navigator&&location.protocol.startsWith('http'))window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
