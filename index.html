@@ -2625,7 +2625,7 @@ function sbGateRender(){const el=$('#sb-gate');if(!el)return;const login=SG.step
    ${SG.msg?`<div class="cu-msg ${SG.ok?'ok':'bad'}">${esc(SG.msg)}</div>`:''}
    <button class="btn btn-p" data-act="sb-join" ${SG.busy?'disabled':''}>Unirme al equipo</button>
    <button class="btn btn-ghost" data-act="sb-own">No tengo código: empezar con mis equipos</button>
-   <button class="btn btn-ghost btn-s" data-act="sb-out">Salir de la cuenta</button>`}</div></div>`}
+   <button class="btn btn-ghost btn-s" data-act="sb-out">Cerrar sesión</button>`}</div></div>`}
 const sbErr=e=>{const m=(e&&e.message)||'';if(/invalid login|invalid credentials/i.test(m))return 'Email o contraseña incorrectos';if(/already registered|already exists/i.test(m))return 'Ya hay una cuenta con ese email: pulsa «Ya tengo cuenta»';if(/password/i.test(m))return 'La contraseña tiene que tener al menos 6 caracteres';if(/email/i.test(m))return 'Revisa el email';if(/fetch|network/i.test(m))return 'No hay conexión. Prueba otra vez cuando tengas internet';return m||'No se ha podido. Prueba otra vez'};
 ACT['sb-mode']=()=>{SG.mode=SG.mode==='up'?'in':'up';SG.msg='';SG.email=($('#sb-email')||{}).value;sbGateRender()};
 ACT['sb-go']=async()=>{const email=($('#sb-email').value||'').trim(),password=$('#sb-pass').value||'';SG.email=email;if(!email||!password){SG.msg='Escribe tu email y tu contraseña';SG.ok=false;sbGateRender();return}
@@ -2672,6 +2672,41 @@ async function syInit(){if(window.claude&&typeof claude.use==='function')return 
 window.addEventListener('online',()=>{if(SY.db)syPush()});
 {const _rs=ACT['set-reset'];if(_rs)ACT['set-reset']=el=>{if(SY.db){toast('Con los datos compartidos no se puede restablecer el ejemplo: borraría los datos de todos');return}_rs(el)}}
 {const h=$('header.top .sp');if(h){const s=document.createElement('button');s.id='sync-dot';s.className='sync-dot';s.hidden=true;s.dataset.act='sy-acct';h.after(s)}}
+/* ---------- Cuenta: cerrar sesión y equipos siempre en la nube ---------- */
+const SBX={busy:false,out:false};
+/* cada equipo propio se guarda en tu cuenta (su grupo); compartirlo es solo pasar el código */
+async function sbEnsureSpaces(){if(!SB.cli||!SB.user||SBX.busy||!SY.ready||S_SEEDED||S._demo)return;SBX.busy=true;let made=0;
+  try{for(const t of S.teams.slice()){const id=t.id;if(sbSpaceOfTeam(syId(id)))continue;const T=syAllTeams()[id];if(!T||syEmptyTeam(T))continue;const ti=teamInfo(id);
+      const{data,error}=await SB.cli.rpc('bl_create_space',{name:(ti.name+(ti.cat?' · '+ti.cat:'')).slice(0,80),team:id});if(!error&&data)made++}
+    if(made){await sbLoadSpaces();await syPush();if(SY.db&&SY.db.refresh)await SY.db.refresh();if(SH&&SH.render===teamsSheet)renderSheet()}}
+  catch(e){}finally{SBX.busy=false}}
+{const _or=syOnRemote;syOnRemote=function(R,size){_or(R,size);if(SY.db&&SY.db.kind==='supabase')setTimeout(sbEnsureSpaces,800)}}
+{const _sv2=save;save=function(){_sv2();if(SY.db&&SY.db.kind==='supabase'){clearTimeout(SBX.t);SBX.t=setTimeout(sbEnsureSpaces,1500)}}}
+async function sbSignOut(){if(SY.db&&SY.ready&&SY.st!=='ok'){await syPush()}
+  if(SY.st==='off'||SY.st==='saving'){toast('Hay cambios sin subir. Conéctate a internet y vuelve a intentarlo');return}
+  try{await SB.cli.auth.signOut()}catch(e){}sbStop();
+  ['bl-spaces',SYK,LS,'bl-sync-space','bl-space'].forEach(k=>{try{localStorage.removeItem(k)}catch(e){}});
+  try{localStorage.removeItem('bl-auth')}catch(e){}location.reload()}
+ACT['sb-out']=()=>{if(!SBX.out){SBX.out=true;if(SH)renderSheet();else sbSignOut();setTimeout(()=>{SBX.out=false;if(SH)renderSheet()},6000);return}SBX.out=false;sbSignOut()};
+const sbOutBtn=()=>`<button class="btn ${SBX.out?'btn-danger':'btn-ghost'}" data-act="sb-out">${SBX.out?'¿Seguro? Cerrar sesión':'Cerrar sesión'}</button>`;
+ACT['sy-acct']=()=>{if(!SB.cli){if(SY.db)toast(SY.st==='off'?'Sin conexión: los cambios se subirán solos al volver':'Datos compartidos con los entrenadores que tienen el enlace');return}if(!SB.user){SG.step='login';sbGate();return}
+  openSheet(()=>`${sheetHead('Datos compartidos','Tu cuenta')}
+   <div class="stack" style="gap:10px"><div><span class="f-l" style="display:block">Has entrado como</span><b>${esc(SB.user.email||'')}</b></div>
+   <div><span class="f-l" style="display:block">Tus equipos en la nube</span>${SB.spaces.filter(s=>s.team).length?SB.spaces.filter(s=>s.team).map(s=>`<div>${esc(s.name)} · código <b class="num">${esc(s.code)}</b></div>`).join(''):'<span class="small muted">Todavía ninguno.</span>'}</div>
+   <div class="small muted">Estado: ${SY.st==='ok'?'todo subido':SY.st==='off'?'sin conexión (se subirá solo al volver)':SY.st==='saving'?'subiendo cambios…':'conectando…'}</div>
+   <div class="small muted">Al cerrar sesión se borran los datos de este dispositivo. Siguen guardados en tu cuenta y vuelven al entrar.</div></div>
+   <div class="sheet-foot">${sbOutBtn()}<button class="btn" data-act="teams">Tus equipos</button></div>`)};
+/* también en Ajustes */
+{const _st=ACT['settings'];ACT['settings']=(...a)=>{_st(...a);if(!SB.cli||!SH)return;const r=SH.render;SH.render=()=>{const h=r();
+  const box=SB.user?`<hr class="sep"><div class="stack" style="gap:6px"><b>Tu cuenta</b><span class="small muted">Has entrado como <b>${esc(SB.user.email||'')}</b>. Al cerrar sesión se borran los datos de este dispositivo; siguen en tu cuenta y vuelven al entrar.</span><div class="row">${sbOutBtn()}</div></div>`
+    :`<hr class="sep"><div class="stack" style="gap:6px"><b>Tu cuenta</b><span class="small muted">Estás usando la app sin cuenta: tus datos solo están en este dispositivo.</span><div class="row"><button class="btn btn-s btn-p" data-act="sy-acct">Entrar o crear cuenta</button></div></div>`;
+  const i=h.lastIndexOf('<div class="sheet-foot">');return i<0?h+box:h.slice(0,i)+box+h.slice(i)};renderSheet()}}
+/* «Tus equipos»: el código siempre a la vista */
+{const _ts2=teamsSheet;teamsSheet=function(){let h=_ts2();if(!SB.cli||!SB.user)return h;
+  return h.replace(/<button class="btn btn-s btn-b" data-act="ts-share" data-id="([^"]+)"[^>]*>Compartir<\/button>/g,(m,id)=>{const T=syAllTeams()[id];return T&&syEmptyTeam(T)?'<span class="small muted">Vacío</span>':`<button class="btn btn-s btn-b" data-act="ts-share" data-id="${id}">Ver código</button>`})
+    .replace(/<span class="small muted">Solo tú<\/span>/g,'<span class="small muted">Preparando su código…</span>')
+    .replace('Compartir con otros entrenadores','Códigos de tus equipos').replace('Los ejercicios y jugadas de la pizarra sí se comparten en todos tus equipos.','Para compartir un equipo, pasa su código a sus entrenadores. Los ejercicios y jugadas de la pizarra se comparten en todos tus equipos.')
+    .replace('<button class="btn btn-ghost" data-act="sb-out">Salir de la cuenta</button>',sbOutBtn())}}
 
 /* ---------- APP: copia de seguridad, almacenamiento persistente y modo sin conexión ---------- */
 ACT['bk-export']=()=>{try{const blob=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='basket-lover-copia-'+TODAY+'.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);toast('Copia descargada')}catch(e){toast('No se ha podido descargar la copia')}};
