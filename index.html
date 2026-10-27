@@ -2603,7 +2603,7 @@ function sbStop(){for(const k of Object.keys(SB.chs)){try{SB.cli.removeChannel(S
 /* compartir un equipo, unirse con código, dejar un equipo */
 async function sbShareTeam(tid){if(!SB.user){toast('Primero entra con tu cuenta (pulsa la nube de arriba)');return}const t=teamInfo(tid);
   const{data,error}=await SB.cli.rpc('bl_create_space',{name:(t.name+(t.cat?' · '+t.cat:'')).slice(0,80),team:tid});if(error||!data){toast(error?sbErr(error):'No se ha podido compartir');return}
-  await sbLoadSpaces();SY.ready=true;await syPush();await SY.db.refresh();renderSheet();toast('Equipo compartido. Pasa el código a sus entrenadores.')}
+  await sbLoadSpaces();SY.ready=true;if(SY.db&&SY.db.refresh)await SY.db.refresh();await sbSeedGlobals();await syPush();await SY.db.refresh();renderSheet();toast('Equipo compartido. Pasa el código a sus entrenadores.')}
 async function sbJoin(code){const{data,error}=await SB.cli.rpc('bl_join',{code});if(error||!data){return error?sbErr(error):'Ese código no existe. Revísalo'}
   await sbLoadSpaces();if(SY.db&&SY.db.refresh)await SY.db.refresh();else syStart(sbBackend());return null}
 async function sbLeave(sp){await SB.cli.from('bl_members').delete().eq('space',sp.id).eq('user_id',SB.user.id);await sbLoadSpaces();if(SY.db&&SY.db.refresh)await SY.db.refresh()}
@@ -2678,10 +2678,14 @@ const SBX={busy:false,out:false};
 async function sbEnsureSpaces(){if(!SB.cli||!SB.user||SBX.busy||!SY.ready||S_SEEDED||S._demo)return;SBX.busy=true;let made=0;
   try{for(const t of S.teams.slice()){const id=t.id;if(sbSpaceOfTeam(syId(id)))continue;const T=syAllTeams()[id];if(!T||syEmptyTeam(T))continue;const ti=teamInfo(id);
       const{data,error}=await SB.cli.rpc('bl_create_space',{name:(ti.name+(ti.cat?' · '+ti.cat:'')).slice(0,80),team:id});if(!error&&data)made++}
-    if(made){await sbLoadSpaces();await syPush();if(SY.db&&SY.db.refresh)await SY.db.refresh();if(SH&&SH.render===teamsSheet)renderSheet()}}
+    if(made){await sbLoadSpaces();await sbSeedGlobals();await syPush();if(SY.db&&SY.db.refresh)await SY.db.refresh();if(SH&&SH.render===teamsSheet)renderSheet()}}
   catch(e){}finally{SBX.busy=false}}
 {const _or=syOnRemote;syOnRemote=function(R,size){_or(R,size);if(SY.db&&SY.db.kind==='supabase')setTimeout(sbEnsureSpaces,800)}}
 {const _sv2=save;save=function(){_sv2();if(SY.db&&SY.db.kind==='supabase'){clearTimeout(SBX.t);SBX.t=setTimeout(sbEnsureSpaces,1500)}}}
+/* la biblioteca (ejercicios, jugadas…) también en los equipos recién guardados */
+async function sbSeedGlobals(){const G=Object.entries(syDocs()).filter(([id])=>id.startsWith('g:')&&id!=='g:teams');
+  for(const sp of SB.spaces){if(!sp.team)continue;const D=SB.RS[sp.id]||{};const miss=G.filter(([id])=>!D[id]);if(!miss.length)continue;
+    const rows=miss.map(([id,body])=>({space:sp.id,id,body,updated_at:new Date().toISOString()}));for(let i=0;i<rows.length;i+=25){await SB.cli.from('bl_docs').upsert(rows.slice(i,i+25))}}}
 async function sbSignOut(){if(SY.db&&SY.ready&&SY.st!=='ok'){await syPush()}
   if(SY.st==='off'||SY.st==='saving'){toast('Hay cambios sin subir. Conéctate a internet y vuelve a intentarlo');return}
   try{await SB.cli.auth.signOut()}catch(e){}sbStop();
