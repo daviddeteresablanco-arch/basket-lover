@@ -1,0 +1,22 @@
+{
+  "name": "Basket Lover",
+  "short_name": "Basket Lover",
+  "description": "App para entrenadores de baloncesto: entrenamientos, pizarra, scouting y estadística en directo.",
+  "lang": "es",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EDF0F3",
+  "theme_color": "#D4561A",
+  "categories": ["sports", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Estadística en directo", "url": "./index.html#estadisticas", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Pizarra", "url": "./index.html#pizarra", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
