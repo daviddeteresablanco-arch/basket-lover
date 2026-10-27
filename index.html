@@ -546,6 +546,7 @@ body.v-big .vtip{background:#e8eef3;color:#05080b}
 .sbg-card{width:100%;max-width:380px;display:grid;gap:10px}
 .sbg-card h2{margin:6px 0 0;font-size:22px}.sbg-card .btn{width:100%;justify-content:center}
 .sbg-brand{display:flex;align-items:center;gap:10px;font-size:20px}.sbg-brand .mark{width:36px;height:36px}
+.team-share{display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
 </style>
 </head>
 <body>
@@ -2524,35 +2525,36 @@ function syKeep(){try{localStorage.setItem(SYK,JSON.stringify(SY.last))}catch(e)
 function syStatus(st){SY.st=st;const el=$('#sync-dot');if(!el)return;el.hidden=false;el.className='sync-dot '+st;
   el.innerHTML='<b aria-hidden="true">☁</b><span>'+(st==='ok'?'Compartido':st==='saving'?'Guardando…':st==='off'?'Sin conexión':st==='ro'?'Solo lectura':st==='login'?'Entrar':'Conectando…')+'</span>';el.setAttribute('aria-label',el.textContent.slice(1));
   el.title=st==='off'?'Sin conexión: tus cambios se guardan aquí y se subirán solos al volver la conexión':st==='ro'?'Puedes ver los datos, pero no cambiarlos':st==='login'?'Entra con tu cuenta para compartir los datos con tu equipo de entrenadores':'Los datos se comparten con los demás entrenadores de tu grupo'}
+const syOwn=id=>!SY.db||!SY.db.owns||SY.db.owns(id);
 async function syPush(){if(!SY.db||!SY.ready||SY.ro)return;if(SY.busy){SY.again=true;return}SY.busy=true;let fail=false;
   try{const cur=syDocs();const ops=[];
-    for(const[id,d] of Object.entries(cur)){const j=syJ(d);if(SY.last[id]!==j)ops.push([id,d,j])}
-    for(const id of Object.keys(SY.last)){if(!cur[id])ops.push([id,null,null])}
+    for(const[id,d] of Object.entries(cur)){if(!syOwn(id))continue;const j=syJ(d);if(SY.last[id]!==j)ops.push([id,d,j])}
+    for(const id of Object.keys(SY.last)){if(!cur[id]&&syOwn(id))ops.push([id,null,null])}
     if(ops.length)syStatus('saving');
     for(const[id,d,j] of ops){if(j&&j.length>250000){toast('Hay un elemento demasiado grande para compartirlo');continue}
       try{if(d)await SY.db.set(id,d);else await SY.db.del(id);if(d)SY.last[id]=j;else delete SY.last[id];syKeep()}
       catch(e){if(e&&e.code==='denied'){SY.ro=true;syStatus('ro');break}if(e&&e.code==='quota_exceeded'){toast('La base de datos compartida está llena');break}fail=true;break}}
     if(!SY.ro)syStatus(fail?'off':'ok')}catch(e){syStatus('off')}
   SY.busy=false;if(SY.again){SY.again=false;syPush()}else if(fail){clearTimeout(SY.t);SY.t=setTimeout(syPush,15000)}}
+/* ¿es un equipo vacío creado solo para no enseñar el ejemplo? */
+const syEmptyTeam=d=>{const st=d.settings||{};return !st.team&&!(d.matches||[]).length&&!(d.roster||[]).length&&!(d.sessions||[]).length};
 function syApply(){SY.pending=false;const cur=syDocs();const next=Object.assign({},cur);let ch=false;const first=!Object.keys(SY.last).length;
-  if(first){Object.keys(next).forEach(k=>delete next[k]);Object.entries(SY.remote).forEach(([id,d])=>next[id]=d);ch=true;SY.last={};Object.entries(SY.remote).forEach(([id,d])=>SY.last[id]=syJ(d))}
+  if(first){const dropLocal=S_SEEDED||S._demo;const T=syAllTeams();
+    Object.keys(next).forEach(id=>{if(syOwn(id)){delete next[id];return}const tid=(next[id].g!=='_')?next[id].g:null;if(tid&&(dropLocal||(T[tid]&&syEmptyTeam(T[tid]))))delete next[id]});
+    Object.entries(SY.remote).forEach(([id,d])=>next[id]=d);ch=true;SY.last={};Object.entries(SY.remote).forEach(([id,d])=>SY.last[id]=syJ(d))}
   else{const ids=new Set([...Object.keys(SY.remote),...Object.keys(SY.last)]);
-    for(const id of ids){const r=SY.remote[id],rj=r?syJ(r):undefined;if(rj===SY.last[id])continue;const lj=cur[id]?syJ(cur[id]):undefined;
+    for(const id of ids){if(!syOwn(id)&&!SY.remote[id]){delete SY.last[id];continue}const r=SY.remote[id],rj=r?syJ(r):undefined;if(rj===SY.last[id])continue;const lj=cur[id]?syJ(cur[id]):undefined;
       if(lj===SY.last[id]||lj===rj){if(r)next[id]=r;else delete next[id];ch=ch||lj!==rj}
       if(rj===undefined)delete SY.last[id];else if(lj===SY.last[id]||lj===rj)SY.last[id]=rj}}
-  syKeep();if(!ch){syPush();return}const N=syBuild(next);if(!N)return;
-  const keepRoute=route();S=migrate(N);S_SEEDED=false;try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}
+  syKeep();if(!ch){syPush();return}const N=syBuild(next);if(!N){if(first&&(S_SEEDED||S._demo))syBlank();return}
+  const keepRoute=route();const wasDemo=S_SEEDED||S._demo;S=migrate(N);S_SEEDED=false;if(first&&wasDemo)delete S._demo;try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}
   if(typeof pzReset==='function'&&keepRoute!=='pizarra')try{pzReset()}catch(e){}
-  render();syPush()}
-/* grupo vacío: nunca enseñar los datos de ejemplo; ofrecer subir la copia */
-function syBlank(){delete S._demo;const b=blankTeam('','');TEAM_KEYS.forEach(k=>S[k]=b[k]);S.teamsData={};S.teams=[{id:S.teamId}];try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}if(typeof pzReset==='function')try{pzReset()}catch(e){}render()}
-function syEmptyBanner(on){let el=$('#sy-empty');if(!on||!SB.space){if(el)el.remove();return}if(el)return;el=document.createElement('div');el.id='sy-empty';el.className='cu-msg warn';
-  el.innerHTML='<b>Tu grupo todavía no tiene datos.</b> Si eres quien lo ha creado, sube tu copia (el archivo <code>basket-lover.json</code> de la carpeta Basket Lover\\datos). Si te has unido con un código, espera a que lo haga quien creó el grupo. <label class="btn btn-s btn-p" style="cursor:pointer;margin-top:6px">Subir mi copia<input type="file" accept="application/json,.json" data-chg="bk-import" hidden></label>';
-  const v=$('#view');if(v)v.parentNode.insertBefore(el,v)}
-/* lo que llega de la base de datos: el conjunto completo de documentos */
-function syOnRemote(R,size){SY.remote=R;syEmptyBanner(!size);
-  if(!SY.ready){SY.ready=true;if(!size){if(S_SEEDED||S._demo){syBlank()}else if(!SY.ro){SY.last={};syKeep();syPush()}syStatus(SY.ro?'ro':'ok');return}}
-  syStatus(SY.ro?'ro':'ok');if(SH){SY.pending=true;return}syApply()}
+  render();if(SH&&SH.render===teamsSheet)renderSheet();syPush()}
+/* sin datos compartidos y con el ejemplo: dejar un equipo vacío para empezar */
+function syBlank(){delete S._demo;S_SEEDED=true;const b=blankTeam('','');TEAM_KEYS.forEach(k=>S[k]=b[k]);S.teamsData={};S.teams=[{id:S.teamId}];try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}if(typeof pzReset==='function')try{pzReset()}catch(e){}render()}
+function syOnRemote(R,size){SY.remote=R;
+  if(!SY.ready){SY.ready=true;if(!size){if(S_SEEDED||S._demo){if(!SY.db.kind||SY.db.kind==='claude'||(SB.spaces&&SB.spaces.length))syBlank()}else if(!SY.ro){SY.last={};syKeep();syPush()}syStatus(SY.ro?'ro':'ok');return}}
+  syStatus(SY.ro?'ro':'ok');if(SH&&SH.render!==teamsSheet){SY.pending=true;return}syApply()}
 function syStart(B){SY.db=B;SY.ready=false;B.start(syOnRemote,()=>{syStatus('off')})}
 /* --- Claude: base de datos del artifact --- */
 async function syClaude(){syStatus('wait');let db=null;try{db=await claude.use('db')}catch(e){}
@@ -2562,70 +2564,108 @@ async function syClaude(){syStatus('wait');let db=null;try{db=await claude.use('
   syStart({kind:'claude',start(cb,err){col.onSnapshot(snap=>{if(snap.metadata.fromCache&&!SY.ready)return;const R={};snap.docs.forEach(d=>{if(d.exists)R[d.id]=d.data()});cb(R,snap.size)},e=>{err(e);setTimeout(syClaude,20000)})},
     async set(id,d){try{await col.doc(id).set(d)}catch(e){if(e&&e.code==='invalid_argument'&&/permission|write|level/i.test(e.message||''))throw{code:'denied'};throw e}},
     async del(id){await col.doc(id).delete()}})}
-/* --- Supabase: app propia con cuentas de entrenador --- */
-const SB={cli:null,user:null,space:null,spaceName:'',code:'',ch:null,R:{},t:0};
+/* --- Supabase: app propia; cada equipo se comparte por separado --- */
+const SB={cli:null,user:null,spaces:[],RS:{},chs:{},t:0,iv:0};
+const sbTeamOf=id=>{const m=/^t:([^:]+):/.exec(id);return m?m[1]:null};
+const sbSpaceOfTeam=tid=>SB.spaces.find(s=>s.team&&syId(s.team)===tid);
 function sbLoad(){return new Promise(res=>{if(window.supabase)return res(true);const s=document.createElement('script');s.src='vendor/supabase.js';s.onload=()=>res(!!window.supabase);s.onerror=()=>res(false);document.head.appendChild(s)})}
 async function sbInit(){syStatus('wait');if(!(await sbLoad())){syStatus('off');return}
   SB.cli=supabase.createClient(BL_CFG.url,BL_CFG.key,{auth:{persistSession:true,autoRefreshToken:true,storageKey:'bl-auth'}});
   const{data}=await SB.cli.auth.getSession();SB.user=data&&data.session&&data.session.user||null;
-  SB.cli.auth.onAuthStateChange((ev,ses)=>{SB.user=ses&&ses.user||null;if(ev==='SIGNED_OUT'){sbStop();syStatus('login')}});
-  if(!SB.user){syStatus('login');sbGate();return}await sbSpace()}
-async function sbSpace(){let sp=null;try{sp=JSON.parse(localStorage.getItem('bl-space')||'null')}catch(e){}
-  try{const{data,error}=await SB.cli.from('bl_members').select('space,bl_spaces(name,join_code)').eq('user_id',SB.user.id);if(error)throw error;
-    if(data&&data.length){const m=data.find(x=>sp&&x.space===sp.id)||data[0];sp={id:m.space,name:m.bl_spaces&&m.bl_spaces.name||'',code:m.bl_spaces&&m.bl_spaces.join_code||''};try{localStorage.setItem('bl-space',JSON.stringify(sp))}catch(e){}}else sp=null}
-  catch(e){/* sin conexión: seguimos con el grupo guardado */}
-  if(!sp){sbGate('space');return}SB.space=sp.id;SB.spaceName=sp.name;SB.code=sp.code;sbGateClose();
-  if(SB.last!==sp.id){/* otro grupo: empezar de cero la sincronización */const k='bl-sync-space';if(localStorage.getItem(k)!==sp.id){SY.last={};syKeep();try{localStorage.setItem(k,sp.id)}catch(e){}}}
+  SB.cli.auth.onAuthStateChange((ev,ses)=>{SB.user=ses&&ses.user||null;if(ev==='SIGNED_OUT'){sbStop();SY.db=null;syStatus('login')}});
+  if(!SB.user){if(S_SEEDED||S._demo){sbGate()}syStatus('login');return}await sbAfterLogin()}
+async function sbLoadSpaces(){try{const{data,error}=await SB.cli.from('bl_members').select('space,bl_spaces(name,join_code,team,owner)').eq('user_id',SB.user.id);if(error)throw error;
+    SB.spaces=(data||[]).map(m=>({id:m.space,name:m.bl_spaces&&m.bl_spaces.name||'',code:m.bl_spaces&&m.bl_spaces.join_code||'',team:m.bl_spaces&&m.bl_spaces.team||null,owner:m.bl_spaces&&m.bl_spaces.owner===SB.user.id}));
+    try{localStorage.setItem('bl-spaces',JSON.stringify(SB.spaces))}catch(e){}}
+  catch(e){try{SB.spaces=JSON.parse(localStorage.getItem('bl-spaces')||'[]')||[]}catch(x){SB.spaces=[]}}}
+async function sbAfterLogin(){await sbLoadSpaces();sbGateClose();
+  if(!SB.spaces.length&&(S_SEEDED||S._demo)){sbGate('join');}
   syStart(sbBackend())}
-function sbBackend(){const cli=SB.cli,space=SB.space;let cb=null;
-  const fetchAll=async()=>{const R={};for(let from=0;;from+=1000){const{data,error}=await cli.from('bl_docs').select('id,body').eq('space',space).range(from,from+999);if(error)throw error;data.forEach(r=>R[r.id]=r.body);if(data.length<1000)break}SB.R=R;return R};
-  const emit=()=>{clearTimeout(SB.t);SB.t=setTimeout(()=>cb&&cb(Object.assign({},SB.R),Object.keys(SB.R).length),250)};
-  const refresh=async()=>{try{await fetchAll();emit()}catch(e){syStatus('off')}};
-  return{kind:'supabase',async start(c,err){cb=c;try{await fetchAll();cb(Object.assign({},SB.R),Object.keys(SB.R).length)}catch(e){err(e);setTimeout(()=>{if(SB.space===space)syStart(sbBackend())},20000);return}
-      sbStop();SB.ch=cli.channel('bl-'+space).on('postgres_changes',{event:'*',schema:'public',table:'bl_docs',filter:'space=eq.'+space},p=>{if(p.eventType==='DELETE'){if(p.old&&p.old.id)delete SB.R[p.old.id]}else if(p.new&&p.new.id)SB.R[p.new.id]=p.new.body;emit()}).subscribe(st=>{if(st==='SUBSCRIBED')refresh()});
-      document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refresh()});window.addEventListener('online',refresh);clearInterval(SB.iv);SB.iv=setInterval(()=>{if(document.visibilityState==='visible'&&SB.space===space)refresh()},120000)},
-    async set(id,d){const{error}=await cli.from('bl_docs').upsert({space,id,body:d,updated_at:new Date().toISOString()});if(error){if(/row-level|permission|policy/i.test(error.message||''))throw{code:'denied'};throw error}SB.R[id]=d},
-    async del(id){const{error}=await cli.from('bl_docs').delete().eq('space',space).eq('id',id);if(error)throw error;delete SB.R[id]}}}
-function sbStop(){if(SB.ch){try{SB.cli.removeChannel(SB.ch)}catch(e){}SB.ch=null}}
-/* pantalla de entrada y de grupo */
+function sbBackend(){const cli=SB.cli;let cb=null;
+  const union=()=>{const R={};for(const sp of SB.spaces){if(!sp.team)continue;const pre='t:'+syId(sp.team)+':';const D=SB.RS[sp.id]||{};for(const[id,b] of Object.entries(D)){if(id.startsWith(pre)||(id.startsWith('g:')&&id!=='g:teams'))R[id]=b}}return R};
+  const fetchSpace=async sp=>{const D={};for(let from=0;;from+=1000){const{data,error}=await cli.from('bl_docs').select('id,body').eq('space',sp.id).range(from,from+999);if(error)throw error;data.forEach(r=>D[r.id]=r.body);if(data.length<1000)break}SB.RS[sp.id]=D;
+    /* limpiar lo que no es de este equipo (grupos antiguos con varios equipos) */
+    if(sp.team&&sp.owner){const pre='t:'+syId(sp.team)+':';for(const id of Object.keys(D)){if((id.startsWith('t:')&&!id.startsWith(pre))||id==='g:teams'){try{await cli.from('bl_docs').delete().eq('space',sp.id).eq('id',id);delete D[id]}catch(e){}}}}};
+  const emit=()=>{clearTimeout(SB.t);SB.t=setTimeout(()=>{const R=union();cb&&cb(R,Object.keys(R).length)},250)};
+  const refresh=async()=>{try{await sbLoadSpaces();for(const sp of SB.spaces)await fetchSpace(sp);for(const k of Object.keys(SB.RS))if(!SB.spaces.some(s=>s.id===k))delete SB.RS[k];listen();emit()}catch(e){syStatus('off')}};
+  const listen=()=>{for(const sp of SB.spaces){if(SB.chs[sp.id])continue;SB.chs[sp.id]=cli.channel('bl-'+sp.id).on('postgres_changes',{event:'*',schema:'public',table:'bl_docs',filter:'space=eq.'+sp.id},p=>{const D=SB.RS[sp.id]=SB.RS[sp.id]||{};if(p.eventType==='DELETE'){if(p.old&&p.old.id)delete D[p.old.id]}else if(p.new&&p.new.id)D[p.new.id]=p.new.body;emit()}).subscribe()}
+    for(const k of Object.keys(SB.chs))if(!SB.spaces.some(s=>s.id===k)){try{cli.removeChannel(SB.chs[k])}catch(e){}delete SB.chs[k]}};
+  const targets=id=>{if(id==='g:teams')return[];const t=sbTeamOf(id);if(t){const sp=sbSpaceOfTeam(t);return sp?[sp]:[]}return SB.spaces.filter(s=>s.team)};
+  const B={kind:'supabase',refresh,
+    owns:id=>targets(id).length>0,
+    async start(c,err){cb=c;try{for(const sp of SB.spaces)await fetchSpace(sp);const R=union();cb(R,Object.keys(R).length)}catch(e){err(e);setTimeout(()=>{if(SY.db===B)syStart(sbBackend())},20000);return}
+      listen();document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&SY.db===B)refresh()});window.addEventListener('online',()=>{if(SY.db===B)refresh()});
+      clearInterval(SB.iv);SB.iv=setInterval(()=>{if(document.visibilityState==='visible'&&SY.db===B)refresh()},120000)},
+    async set(id,d){for(const sp of targets(id)){const{error}=await cli.from('bl_docs').upsert({space:sp.id,id,body:d,updated_at:new Date().toISOString()});if(error){if(/row-level|permission|policy/i.test(error.message||''))throw{code:'denied'};throw error}(SB.RS[sp.id]=SB.RS[sp.id]||{})[id]=d}},
+    async del(id){for(const sp of targets(id)){const{error}=await cli.from('bl_docs').delete().eq('space',sp.id).eq('id',id);if(error)throw error;if(SB.RS[sp.id])delete SB.RS[sp.id][id]}}};
+  return B}
+function sbStop(){for(const k of Object.keys(SB.chs)){try{SB.cli.removeChannel(SB.chs[k])}catch(e){}}SB.chs={};clearInterval(SB.iv)}
+/* compartir un equipo, unirse con código, dejar un equipo */
+async function sbShareTeam(tid){if(!SB.user){toast('Primero entra con tu cuenta (pulsa la nube de arriba)');return}const t=teamInfo(tid);
+  const{data,error}=await SB.cli.rpc('bl_create_space',{name:(t.name+(t.cat?' · '+t.cat:'')).slice(0,80),team:tid});if(error||!data){toast(error?sbErr(error):'No se ha podido compartir');return}
+  await sbLoadSpaces();SY.ready=true;await syPush();await SY.db.refresh();renderSheet();toast('Equipo compartido. Pasa el código a sus entrenadores.')}
+async function sbJoin(code){const{data,error}=await SB.cli.rpc('bl_join',{code});if(error||!data){return error?sbErr(error):'Ese código no existe. Revísalo'}
+  await sbLoadSpaces();if(SY.db&&SY.db.refresh)await SY.db.refresh();else syStart(sbBackend());return null}
+async function sbLeave(sp){await SB.cli.from('bl_members').delete().eq('space',sp.id).eq('user_id',SB.user.id);await sbLoadSpaces();if(SY.db&&SY.db.refresh)await SY.db.refresh()}
+/* pantalla de entrada */
 const SG={mode:'in',msg:'',busy:false};
-function sbGate(step){SG.step=step||'login';let el=$('#sb-gate');if(!el){el=document.createElement('div');el.id='sb-gate';document.body.appendChild(el)}el.hidden=false;document.body.classList.add('locked');sbGateRender()}
+function sbGate(step){SG.step=step||'login';SG.msg='';let el=$('#sb-gate');if(!el){el=document.createElement('div');el.id='sb-gate';document.body.appendChild(el)}el.hidden=false;document.body.classList.add('locked');sbGateRender()}
 function sbGateClose(){const el=$('#sb-gate');if(el){el.hidden=true;el.innerHTML=''}document.body.classList.remove('locked')}
 function sbGateRender(){const el=$('#sb-gate');if(!el)return;const login=SG.step==='login';
   el.innerHTML=`<div class="sbg"><div class="sbg-card"><div class="sbg-brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M16 3v26M3 16h26M7.5 6.5c4 3 4 16 0 19M24.5 6.5c-4 3-4 16 0 19" fill="none" stroke="var(--on-accent)" stroke-width="1.8" opacity=".9"/></svg><b>Basket Lover</b></div>
-  ${login?`<h2>${SG.mode==='up'?'Crea tu cuenta':'Entra en tu cuenta'}</h2><p class="muted small">Con tu cuenta compartes los datos con los demás entrenadores de tu grupo, en el móvil y en el ordenador.</p>
+  ${login?`<h2>${SG.mode==='up'?'Crea tu cuenta':'Entra en tu cuenta'}</h2><p class="muted small">Con tu cuenta tienes tus equipos en el móvil y en el ordenador, y puedes compartir cada equipo con sus entrenadores.</p>
    <label class="f-l" for="sb-email">Email</label><input class="inp" id="sb-email" type="email" autocomplete="email" inputmode="email" value="${esc(SG.email||'')}">
    <label class="f-l" for="sb-pass">Contraseña${SG.mode==='up'?' (mínimo 6 caracteres)':''}</label><input class="inp" id="sb-pass" type="password" autocomplete="${SG.mode==='up'?'new-password':'current-password'}">
    ${SG.msg?`<div class="cu-msg ${SG.ok?'ok':'bad'}">${esc(SG.msg)}</div>`:''}
    <button class="btn btn-p" data-act="sb-go" ${SG.busy?'disabled':''}>${SG.busy?'Un momento…':SG.mode==='up'?'Crear cuenta':'Entrar'}</button>
    <button class="btn btn-ghost" data-act="sb-mode">${SG.mode==='up'?'Ya tengo cuenta: entrar':'No tengo cuenta: crearla'}</button>
    <button class="btn btn-ghost btn-s" data-act="sb-skip">Usar sin cuenta en este dispositivo</button>`
-  :`<h2>Tu grupo de entrenadores</h2><p class="muted small">Los datos se comparten dentro de un grupo. Si eres el primero, créalo y pasa el código a los demás. Si te han pasado un código, únete.</p>
-   <label class="f-l" for="sb-code">Código del grupo</label><input class="inp" type="text" id="sb-code" autocapitalize="characters" placeholder="Ej.: K7P2QX">
-   <button class="btn btn-p" data-act="sb-join" ${SG.busy?'disabled':''}>Unirme al grupo</button>
-   <hr class="sep"><label class="f-l" for="sb-sname">O crea un grupo nuevo</label><input class="inp" type="text" id="sb-sname" placeholder="Ej.: Entrenadores Distrito Olímpico">
-   <button class="btn" data-act="sb-create" ${SG.busy?'disabled':''}>Crear grupo</button>
+  :`<h2>¿Te han pasado un código?</h2><p class="muted small">Cada equipo tiene su código. Con él ves y llevas ese equipo junto a sus otros entrenadores. Si te dan más de un código, puedes añadir más equipos luego desde «Tus equipos».</p>
+   <label class="f-l" for="sb-code">Código del equipo</label><input class="inp" type="text" id="sb-code" autocapitalize="characters" placeholder="Ej.: K7P2QX">
    ${SG.msg?`<div class="cu-msg ${SG.ok?'ok':'bad'}">${esc(SG.msg)}</div>`:''}
+   <button class="btn btn-p" data-act="sb-join" ${SG.busy?'disabled':''}>Unirme al equipo</button>
+   <button class="btn btn-ghost" data-act="sb-own">No tengo código: empezar con mis equipos</button>
    <button class="btn btn-ghost btn-s" data-act="sb-out">Salir de la cuenta</button>`}</div></div>`}
 const sbErr=e=>{const m=(e&&e.message)||'';if(/invalid login|invalid credentials/i.test(m))return 'Email o contraseña incorrectos';if(/already registered|already exists/i.test(m))return 'Ya hay una cuenta con ese email: pulsa «Ya tengo cuenta»';if(/password/i.test(m))return 'La contraseña tiene que tener al menos 6 caracteres';if(/email/i.test(m))return 'Revisa el email';if(/fetch|network/i.test(m))return 'No hay conexión. Prueba otra vez cuando tengas internet';return m||'No se ha podido. Prueba otra vez'};
 ACT['sb-mode']=()=>{SG.mode=SG.mode==='up'?'in':'up';SG.msg='';SG.email=($('#sb-email')||{}).value;sbGateRender()};
 ACT['sb-go']=async()=>{const email=($('#sb-email').value||'').trim(),password=$('#sb-pass').value||'';SG.email=email;if(!email||!password){SG.msg='Escribe tu email y tu contraseña';SG.ok=false;sbGateRender();return}
   SG.busy=true;SG.msg='';sbGateRender();try{const r=SG.mode==='up'?await SB.cli.auth.signUp({email,password}):await SB.cli.auth.signInWithPassword({email,password});if(r.error)throw r.error;
     SB.user=r.data.user||(r.data.session&&r.data.session.user);if(!r.data.session){SG.msg='Cuenta creada. Revisa tu correo para confirmarla y luego entra.';SG.ok=true;SG.mode='in';SG.busy=false;sbGateRender();return}
-    SG.busy=false;SG.msg='';await sbSpace()}catch(e){SG.busy=false;SG.msg=sbErr(e);SG.ok=false;sbGateRender()}};
+    SG.busy=false;SG.msg='';await sbAfterLogin()}catch(e){SG.busy=false;SG.msg=sbErr(e);SG.ok=false;sbGateRender()}};
 ACT['sb-skip']=()=>{sbGateClose();syStatus('login')};
+ACT['sb-own']=()=>{sbGateClose();if(S_SEEDED||S._demo)syBlank();toast('Crea tu equipo en «Tus equipos» (pulsa el nombre del equipo, arriba)')};
 ACT['sb-join']=async()=>{const code=($('#sb-code').value||'').trim().toUpperCase();if(!code){SG.msg='Escribe el código que te han pasado';SG.ok=false;sbGateRender();return}SG.busy=true;sbGateRender();
-  const{data,error}=await SB.cli.rpc('bl_join',{code});SG.busy=false;if(error||!data){SG.msg=error?sbErr(error):'Ese código no existe. Revísalo';SG.ok=false;sbGateRender();return}SY.last={};syKeep();await sbSpace();toast('Ya estás en el grupo: estos son sus datos')};
-ACT['sb-create']=async()=>{const name=($('#sb-sname').value||'').trim();if(!name){SG.msg='Ponle un nombre al grupo';SG.ok=false;sbGateRender();return}SG.busy=true;sbGateRender();
-  const{data,error}=await SB.cli.rpc('bl_create_space',{name});SG.busy=false;if(error||!data){SG.msg=sbErr(error);SG.ok=false;sbGateRender();return}SY.last={};syKeep();await sbSpace();toast('Grupo creado. Tus datos de este dispositivo se suben al grupo.')};
-ACT['sb-out']=async()=>{try{await SB.cli.auth.signOut()}catch(e){}try{localStorage.removeItem('bl-space')}catch(e){}SB.space=null;SY.db=null;SY.ready=false;SG.step='login';SG.msg='';closeSheet();sbGate()};
-ACT['sy-acct']=()=>{if(!SB.cli){if(SY.db)toast(SY.st==='off'?'Sin conexión: los cambios se subirán solos al volver':'Datos compartidos con los entrenadores que tienen el enlace');return}if(!SB.user){SG.step='login';sbGate();return}if(!SB.space){sbGate('space');return}
-  openSheet(()=>`${sheetHead('Datos compartidos','Cuenta y grupo')}
-   <div class="stack" style="gap:10px"><div><span class="f-l" style="display:block">Tu cuenta</span><b>${esc(SB.user.email||'')}</b></div>
-   <div><span class="f-l" style="display:block">Grupo</span><b>${esc(SB.spaceName||'')}</b></div>
-   <div class="rulebox"><span class="f-l" style="display:block">Código para invitar a otro entrenador</span><b class="num" style="font-size:22px;letter-spacing:2px">${esc(SB.code||'—')}</b><span class="small muted">Que se instale la app, cree su cuenta y escriba este código en «Unirme al grupo».</span></div>
+  const e=await sbJoin(code);SG.busy=false;if(e){SG.msg=e;SG.ok=false;sbGateRender();return}sbGateClose();toast('Ya estás en el equipo')};
+ACT['sb-out']=async()=>{try{await SB.cli.auth.signOut()}catch(e){}try{localStorage.removeItem('bl-spaces')}catch(e){}SB.spaces=[];SB.RS={};SY.db=null;SY.ready=false;SG.step='login';closeSheet();sbGate()};
+ACT['sy-acct']=()=>{if(!SB.cli){if(SY.db)toast(SY.st==='off'?'Sin conexión: los cambios se subirán solos al volver':'Datos compartidos con los entrenadores que tienen el enlace');return}if(!SB.user){SG.step='login';sbGate();return}
+  openSheet(()=>`${sheetHead('Datos compartidos','Tu cuenta')}
+   <div class="stack" style="gap:10px"><div><span class="f-l" style="display:block">Cuenta</span><b>${esc(SB.user.email||'')}</b></div>
+   <div><span class="f-l" style="display:block">Equipos compartidos</span>${SB.spaces.filter(s=>s.team).length?SB.spaces.filter(s=>s.team).map(s=>`<div>${esc(s.name)} · código <b class="num">${esc(s.code)}</b></div>`).join(''):'<span class="small muted">Ninguno todavía. Compártelos desde «Tus equipos».</span>'}</div>
    <div class="small muted">Estado: ${SY.st==='ok'?'todo subido':SY.st==='off'?'sin conexión (se subirá solo al volver)':SY.st==='saving'?'subiendo cambios…':'conectando…'}</div></div>
-   <div class="sheet-foot"><button class="btn btn-ghost" data-act="sb-out">Salir de la cuenta</button><button class="btn" data-act="close-sheet">Cerrar</button></div>`)};
+   <div class="sheet-foot"><button class="btn btn-ghost" data-act="sb-out">Salir de la cuenta</button><button class="btn" data-act="teams">Tus equipos</button></div>`)};
+/* «Tus equipos»: compartir cada equipo con su código, unirse a otro, dejar uno compartido */
+const TSH={};
+{const _ts=teamsSheet;teamsSheet=function(){let h=_ts();if(!SB.cli)return h;
+  const rows=S.teams.map(t=>t.id).map(id=>{const sp=sbSpaceOfTeam(syId(id)),ti=teamInfo(id);
+    return `<div class="team-share"><div style="min-width:0;flex:1"><b>${esc(ti.name)}</b> <span class="small muted">${esc(ti.cat)}</span><br>${sp?`<span class="small">Compartido · código <b class="num" style="letter-spacing:1px">${esc(sp.code)}</b></span>`:'<span class="small muted">Solo tú</span>'}</div>
+    ${sp?`<button class="btn btn-s" data-act="ts-copy" data-code="${esc(sp.code)}">Copiar código</button>`:`<button class="btn btn-s btn-b" data-act="ts-share" data-id="${id}" ${TSH.busy?'disabled':''}>Compartir</button>`}</div>`}).join('');
+  const box=SB.user?`<hr class="sep"><div class="f-l" style="margin:0">Compartir con otros entrenadores</div>
+    <span class="small muted">Cada equipo tiene su propio código. Quien tenga el código del infantil solo ve el infantil; quien tenga el del alevín, solo el alevín. Los ejercicios y jugadas de la pizarra sí se comparten en todos tus equipos.</span>
+    <div class="stack" style="gap:6px">${rows}</div>
+    <div class="row" style="gap:6px;align-items:end"><label class="f" style="flex:1">¿Te han pasado un código?<input type="text" id="ts-code" placeholder="Ej.: K7P2QX" autocapitalize="characters" value="${esc(TSH.code||'')}" data-inp="ts-code"></label><button class="btn btn-s btn-p" data-act="ts-join">Unirme</button></div>
+    ${TSH.msg?`<div class="cu-msg bad">${esc(TSH.msg)}</div>`:''}`
+   :`<hr class="sep"><div class="cu-msg warn">Para compartir un equipo con otros entrenadores, entra con tu cuenta. <button class="btn btn-s btn-p" data-act="sy-acct">Entrar</button></div>`;
+  const i=h.indexOf('<hr class="sep"><div class="f-l" style="margin:0">Nuevo equipo');return i<0?h+box:h.slice(0,i)+box+h.slice(i)}}
+INP['ts-code']=el=>{TSH.code=el.value};
+ACT['ts-share']=async el=>{if(TSH.busy)return;TSH.busy=true;renderSheet();try{await sbShareTeam(el.dataset.id)}finally{TSH.busy=false;renderSheet()}};
+ACT['ts-copy']=async el=>{const c=el.dataset.code;try{await navigator.clipboard.writeText(c);toast('Código copiado: '+c)}catch(e){toast('Código: '+c)}};
+ACT['ts-join']=async()=>{const code=(TSH.code||'').trim().toUpperCase();if(!code){TSH.msg='Escribe el código';renderSheet();return}TSH.msg='';const e=await sbJoin(code);if(e){TSH.msg=e;renderSheet();return}TSH.code='';renderSheet();toast('Equipo añadido')};
+/* borrar un equipo compartido = dejar de verlo (no se borra para los demás) */
+{const _td=ACT['team-del'];ACT['team-del']=async el=>{const id=el.dataset.id;const sp=SB.cli&&sbSpaceOfTeam(syId(id));if(!sp)return _td(el);
+  if(NT.del!==id){NT.del=id;renderSheet();return}NT.del=null;const t=teamInfo(id);
+  if(sp.owner){toast('Eres quien compartió este equipo: no se puede borrar desde aquí');renderSheet();return}
+  await sbLeave(sp);S.teams=S.teams.filter(x=>x.id!==id);delete S.teamsData[id];const pre='t:'+syId(id)+':';Object.keys(SY.last).forEach(k=>{if(k.startsWith(pre))delete SY.last[k]});syKeep();
+  try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}renderSheet();toast('Ya no ves '+t.name)}}
 async function syInit(){if(window.claude&&typeof claude.use==='function')return syClaude();if(typeof BL_CFG!=='undefined'&&BL_CFG.url&&BL_CFG.key&&location.protocol.startsWith('http'))return sbInit()}
 {const _sv=save;save=function(){_sv();if(SY.db&&SY.ready&&!SY.ro){clearTimeout(SY.t);SY.t=setTimeout(syPush,700)}}}
 {const _cs=closeSheet;closeSheet=function(){_cs();if(SY.pending)setTimeout(syApply,0)}}

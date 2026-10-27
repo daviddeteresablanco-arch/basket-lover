@@ -5,6 +5,7 @@ create table if not exists public.bl_spaces (
   id text primary key default substr(md5(random()::text || clock_timestamp()::text), 1, 12),
   name text not null,
   join_code text not null unique,
+  team text,
   owner uuid not null default auth.uid(),
   created_at timestamptz not null default now()
 );
@@ -53,18 +54,21 @@ create policy "cambiar datos del grupo" on public.bl_docs for update to authenti
 drop policy if exists "borrar datos del grupo" on public.bl_docs;
 create policy "borrar datos del grupo" on public.bl_docs for delete to authenticated using (public.bl_is_member(space));
 
--- Crear un grupo: lo crea y mete dentro a quien lo crea. Devuelve el id del grupo.
-create or replace function public.bl_create_space(name text) returns text
+-- Compartir un equipo: crea su grupo (con su código) y mete dentro a quien lo comparte. Devuelve el id del grupo.
+create or replace function public.bl_create_space(name text, team text) returns text
 language plpgsql security definer set search_path = public as $$
 declare sid text; c text; i int := 0;
 begin
   if auth.uid() is null then raise exception 'not authenticated'; end if;
+  select s.id into sid from public.bl_spaces s join public.bl_members m on m.space = s.id
+    where s.team = bl_create_space.team and m.user_id = auth.uid() limit 1;
+  if sid is not null then return sid; end if;
   loop
     c := upper(substr(translate(md5(random()::text || clock_timestamp()::text), '01', ''), 1, 6));
     exit when length(c) = 6 and not exists (select 1 from public.bl_spaces where join_code = c);
     i := i + 1; if i > 20 then raise exception 'no code'; end if;
   end loop;
-  insert into public.bl_spaces (name, join_code, owner) values (name, c, auth.uid()) returning id into sid;
+  insert into public.bl_spaces (name, join_code, owner, team) values (name, c, auth.uid(), bl_create_space.team) returning id into sid;
   insert into public.bl_members (space, user_id, email) values (sid, auth.uid(), auth.jwt() ->> 'email');
   return sid;
 end $$;
@@ -82,9 +86,9 @@ begin
   return sid;
 end $$;
 
-revoke all on function public.bl_create_space(text) from public, anon;
+revoke all on function public.bl_create_space(text, text) from public, anon;
 revoke all on function public.bl_join(text) from public, anon;
-grant execute on function public.bl_create_space(text) to authenticated;
+grant execute on function public.bl_create_space(text, text) to authenticated;
 grant execute on function public.bl_join(text) to authenticated;
 grant execute on function public.bl_is_member(text) to authenticated;
 
