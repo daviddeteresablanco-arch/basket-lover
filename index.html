@@ -556,6 +556,24 @@ body.v-big .vtip{background:#e8eef3;color:#05080b}
 .scf td,.scf th{white-space:nowrap}.scf-x{border:0;background:none;color:inherit;cursor:pointer;padding:0 0 0 6px;font-size:14px}
 .rv-link{display:grid;gap:6px;padding:10px;border:1.5px dashed var(--accent);border-radius:10px}.rv-link select{flex:1;min-width:0}
 .rv-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface,transparent)}.rv-row .num{white-space:nowrap}.rv-row .good{color:var(--good,#1d7a46)}.rv-row .bad{color:var(--bad)}
+#print-root{display:none}
+@media print{
+ @page{size:A4;margin:12mm}
+ body.printing{background:#fff!important;color:#000!important}
+ body.printing>*:not(#print-root){display:none!important}
+ body.printing #print-root{display:block!important}
+ #print-root{font:10.5pt/1.35 system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#000}
+ #print-root h1{font-size:22pt;margin:0}#print-root h2{font-size:11.5pt;margin:12pt 0 4pt;text-transform:uppercase;letter-spacing:.04em;border-bottom:1.2pt solid #000;padding-bottom:2pt;break-after:avoid}
+ .pr-h{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2pt solid #000;padding-bottom:6pt}.pr-k{font-size:9pt;text-transform:uppercase;letter-spacing:.06em}
+ .pr-meta{text-align:right;font-size:10pt}.pr-line{margin:6pt 0 0}
+ .pr-cols{display:grid;grid-template-columns:1fr 1fr;gap:14pt}.pr-cols ol{margin:0;padding-left:16pt}.pr-empty{list-style:none;color:#777}
+ .pr-t{width:100%;border-collapse:collapse;font-size:9.5pt}.pr-t th,.pr-t td{border:.6pt solid #888;padding:3pt 4pt;vertical-align:top;text-align:left}.pr-t th{background:#eee}.pr-t td.n{text-align:center;white-space:nowrap}
+ .pr-t tr{break-inside:avoid}.pr-s{font-size:8.5pt;color:#444}
+ .pr-dl{display:grid;grid-template-columns:auto 1fr;gap:2pt 10pt;margin:0}.pr-dl dt{font-weight:700}.pr-dl dd{margin:0}
+ .pr-plays{display:grid;grid-template-columns:1fr 1fr;gap:10pt}.pr-plays figure{margin:0;break-inside:avoid}.pr-board{width:100%;height:auto;border:.6pt solid #888}
+ .pr-sum .pr-plays{grid-template-columns:1fr 1fr 1fr}.pr-sum .pr-board{max-height:62mm;width:auto;max-width:100%;display:block}
+ .pr-break{break-before:auto}.pr-f{margin-top:12pt;font-size:8pt;color:#666;text-align:right}
+}
 </style>
 </head>
 <body>
@@ -2615,6 +2633,38 @@ ACT['fi-to-sc']=()=>{const sel=($('#fi-sc')||{}).value||'new';let sc=sel!=='new'
   const T=sc.fbm=sc.fbm||{games:[]};closeSheet();SC.open=sc.id;
   (async()=>{const f=FI.file;await scfImport(sc,[f]);if(route()!=='scouting')location.hash='scouting';else render()})()};
 {const _ff=CHG['fbm-file'];CHG['fbm-file']=async el=>{FI.file=el.files&&el.files[0];return _ff(el)}}
+/* ---------- Scouting: imprimir o guardar en PDF (hoja resumen o informe completo) ---------- */
+function scpPlayers(r){const {list}=scfAgg(r);const st=d=>list.find(a=>String(a.dorsal)===String(d));return sortedPlayers(r).map(p=>({p,s:st(p.dorsal)}))}
+function scpHTML(r,mode){const t=tplById(r.tplId);const has=k=>t.sections.includes(k);const m=r.matchId&&matchById(r.matchId);const full=mode==='full';const e=r.estilo||{},g=r.general||{};
+  const A=r.claves.atq.filter(x=>x&&x.trim()),D=r.claves.def.filter(x=>x&&x.trim());const P=scpPlayers(r);const hasSt=P.some(x=>x.s);
+  const plays=r.playIds.map(id=>S.plays.find(p=>p.id===id)).filter(Boolean);
+  let h=`<header class="pr-h"><div><div class="pr-k">Scouting · ${esc(S.settings.team)}${S.settings.category?' '+esc(S.settings.category):''}</div><h1>${esc(r.rival||'Rival')}</h1></div>
+    <div class="pr-meta">${m?`${fmtDay(m.date)}${m.time?' · '+m.time:''}<br>${m.home?'En casa':'Fuera'}${m.info&&m.info.split('·').length>2?' · '+esc(m.info.split('·').slice(-1)[0].trim()):''}`:''}</div></header>`;
+  const est=[e.ritmo&&'Ritmo '+e.ritmo.toLowerCase(),(e.defensas||[]).length&&'Defienden: '+e.defensas.join(', ')].filter(Boolean);
+  if(!full&&est.length)h+=`<p class="pr-line">${est.map(esc).join(' · ')}</p>`;
+  if(has('claves')&&(A.length||D.length))h+=`<section class="pr-cols"><div><h2>Claves en ataque</h2><ol>${A.map(x=>`<li>${esc(x)}</li>`).join('')||'<li class="pr-empty">—</li>'}</ol></div><div><h2>Claves en defensa</h2><ol>${D.map(x=>`<li>${esc(x)}</li>`).join('')||'<li class="pr-empty">—</li>'}</ol></div></section>`;
+  if(full&&has('general')){const x=[['Entrenador',g.coach],['Pabellón',g.court],['Balance',g.record],['Último enfrentamiento',g.last]].filter(y=>y[1]);if(x.length)h+=`<section><h2>Datos generales</h2><dl class="pr-dl">${x.map(([k,v])=>`<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl></section>`}
+  if(full&&has('estilo')&&(est.length||e.ataque||e.transicion))h+=`<section><h2>Estilo de juego</h2>${est.length?`<p>${est.map(esc).join(' · ')}</p>`:''}${e.ataque?`<p><b>Cómo atacan.</b> ${esc(e.ataque)}</p>`:''}${e.transicion?`<p><b>Transición y rebote.</b> ${esc(e.transicion)}</p>`:''}</section>`;
+  if(P.length)h+=`<section><h2>Jugadores</h2><table class="pr-t"><thead><tr><th>#</th><th>Jugador</th><th>Peligro</th>${hasSt?'<th>PTS</th><th>T3</th><th>TL</th>':''}<th>Fuertes</th><th>Débiles</th><th>Cómo defenderle</th></tr></thead><tbody>
+    ${P.map(({p,s})=>`<tr><td class="n">${esc(p.dorsal||'')}</td><td><b>${esc(p.name||p.pos||'')}</b>${[p.pos&&p.name?p.pos:'',p.hand==='Zurdo'?'zurdo':''].filter(Boolean).length?`<br><span class="pr-s">${[p.pos&&p.name?p.pos:'',p.hand==='Zurdo'?'zurdo':''].filter(Boolean).map(esc).join(' · ')}</span>`:''}</td><td class="n">${'★'.repeat(p.danger||0)}</td>
+      ${hasSt?`<td class="n">${s?scfAvg(s.pts,s.gp):''}</td><td class="n">${s?scfAvg(s.t3a,s.gp):''}</td><td class="n">${s&&s.tli?scfPct(s.tla,s.tli):''}</td>`:''}<td>${(p.fuertes||[]).map(esc).join(', ')}</td><td>${(p.debiles||[]).map(esc).join(', ')}</td><td>${esc(p.howto||'')}</td></tr>`).join('')}</tbody></table>
+    ${hasSt?`<p class="pr-s">PTS y T3: media por partido · TL: acierto · Datos de ${scfAgg(r).G.length} ${scfAgg(r).G.length===1?'partido':'partidos'} de la FBM.</p>`:''}</section>`;
+  if(full&&scfAgg(r).G.length){const {G,list}=scfAgg(r);h+=`<section class="pr-break"><h2>Estadísticas FBM (${G.length} ${G.length===1?'partido':'partidos'}: ${G.map(x=>`${x.home?'vs':'en'} ${esc(x.opp)} ${x.pf}–${x.pa}`).join(', ')})</h2><table class="pr-t"><thead><tr><th>#</th><th>Jugador</th><th>PJ</th><th>MIN</th><th>PTS</th><th>T2</th><th>T3</th><th>TL</th><th>FC</th></tr></thead><tbody>
+    ${list.map(a=>`<tr><td class="n">${esc(a.dorsal)}</td><td>${esc(a.dorsal==='X'?'(sin nombre)':fiPretty(a.name))}</td><td class="n">${a.gp}</td><td class="n">${scfAvg(a.sec/60,a.gp)}</td><td class="n"><b>${scfAvg(a.pts,a.gp)}</b></td><td class="n">${scfAvg(a.t2a,a.gp)}/${scfAvg(a.t2i,a.gp)}</td><td class="n">${scfAvg(a.t3a,a.gp)}/${scfAvg(a.t3i,a.gp)}</td><td class="n">${scfAvg(a.tla,a.gp)}/${scfAvg(a.tli,a.gp)}</td><td class="n">${scfAvg(a.fc,a.gp)}</td></tr>`).join('')}</tbody></table></section>`}
+  if(has('jugadas')&&plays.length)h+=`<section class="${full?'':'pr-break'}"><h2>Jugadas del rival</h2><div class="pr-plays">${plays.map(p=>`<figure>${thumb(p.board,'pr-board')}<figcaption><b>${esc(p.name)}</b> <span class="pr-s">${esc(p.kind||'')}</span>${p.notes&&p.notes.defend?`<br><b>Defenderla:</b> ${esc(p.notes.defend)}`:''}${full&&p.notes&&p.notes.danger?`<br><b>Dónde hace daño:</b> ${esc(p.notes.danger)}`:''}</figcaption></figure>`).join('')}</div></section>`;
+  if(full&&has('preguntas')){const qs=t.questions.map(q=>[q,(r.answers||{})[qKey(q)]]).filter(x=>x[1]);if(qs.length)h+=`<section><h2>Preguntas</h2><dl class="pr-dl">${qs.map(([q,a])=>`<dt>${esc(q)}</dt><dd>${esc(a)}</dd>`).join('')}</dl></section>`}
+  if(full&&r.notas)h+=`<section><h2>Notas</h2><p>${esc(r.notas).replace(/\n/g,'<br>')}</p></section>`;
+  return h+`<footer class="pr-f">Basket Lover · ${fmtDay(TODAY)}</footer>`}
+function scPrint(mode){const r=scById(SC.open);if(!r)return;if(window.claude){toast('Para imprimir, usa la app nueva (daviddeteresablanco-arch.github.io/basket-lover)');return}
+  let el=$('#print-root');if(!el){el=document.createElement('div');el.id='print-root';document.body.appendChild(el)}el.innerHTML=scpHTML(r,mode);el.className=mode==='full'?'pr-full':'pr-sum';
+  closeSheet();document.body.classList.add('printing');const old=document.title;document.title=`Scouting ${r.rival||''}`.trim();
+  const done=()=>{document.body.classList.remove('printing');document.title=old;window.removeEventListener('afterprint',done)};window.addEventListener('afterprint',done);setTimeout(()=>{try{window.print()}catch(e){done()}},120)}
+ACT['sc-print']=()=>openSheet(()=>`${sheetHead('Imprimir o guardar en PDF','Informe de scouting')}
+  <p class="small muted">Se abre la ventana de imprimir del móvil o del ordenador. Para tenerlo en PDF, elige «Guardar como PDF» como impresora.</p>
+  <div class="stack" style="gap:8px"><button class="btn btn-p" data-act="sc-print-go" data-m="sum">Hoja resumen<span class="small" style="font-weight:400;display:block">Claves, jugadores y jugadas. Para el banquillo.</span></button>
+  <button class="btn" data-act="sc-print-go" data-m="full">Informe completo<span class="small" style="font-weight:400;display:block">Todo el informe: estilo, estadísticas FBM, preguntas y notas.</span></button></div>`);
+ACT['sc-print-go']=el=>scPrint(el.dataset.m);
+{const _sv3=scoutView;scoutView=function(){return _sv3().replace('<button class="btn btn-p btn-s" data-act="sc-copy">Copiar resumen</button>','<div class="row" style="gap:6px"><button class="btn btn-s" data-act="sc-print">🖨 Imprimir / PDF</button><button class="btn btn-p btn-s" data-act="sc-copy">Copiar resumen</button></div>')}}
 /* ---------- VÍDEO: informe del partido (qué mejorar en ataque, en defensa y dónde nos hicieron daño) ---------- */
 const RV_CATS=[['ok','Lo que hicimos bien','Ej.: buena circulación contra la zona, mucha intensidad en defensa'],['atk','Ataque · a mejorar','Ej.: no corremos el contraataque, pocos pases antes de tirar'],['def','Defensa · a mejorar','Ej.: no cerramos el rebote, llegamos tarde a las ayudas'],['dmg','Dónde nos hicieron daño','Ej.: su 4 abierto en el triple, bloqueo directo central']];
 const RV={draft:{},time:{}};
