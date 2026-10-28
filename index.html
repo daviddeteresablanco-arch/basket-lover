@@ -899,7 +899,7 @@ function evRow(ev){
   if(ev.kind==='match'){const m=ev.m;const played=m.us!=null;const win=played&&m.us>m.them;
     return `<button class="ev" data-act="open-match" data-id="${m.id}"><div class="when"><b>${parse(m.date).getDate()}</b><small>${WD[parse(m.date).getDay()]}</small></div>
     <div class="what"><div class="row"><span class="pill p-match">Partido</span>${played?`<span class="pill ${win?'p-win':'p-loss'}">${win?'Victoria':'Derrota'} <span class="num">${m.us}–${m.them}</span></span>`:''}</div>
-    <b>${m.home?'vs':'en casa de'} ${esc(m.rival)}</b><span class="small muted">${m.time} · ${m.home?'Local':'Visitante'}${m.note?' · Nota guardada':played?' · Sin nota':''}</span></div></button>`}
+    <b>${m.home?'vs':'en casa de'} ${esc(m.rival)}</b><span class="small muted">${m.time} · ${m.home?'Local':'Visitante'}${m.info&&m.info.split('·').length>2?' · '+esc(m.info.split('·').slice(-1)[0].trim()):''}${m.note?' · Nota guardada':played?' · Sin nota':''}</span></div></button>`}
   if(ev.kind==='session'){const s=ev.s;const objs=sessObjs(s).map(objById).filter(Boolean);
     return `<button class="ev" data-act="open-session" data-id="${s.id}"><div class="when"><b>${parse(s.date).getDate()}</b><small>${WD[parse(s.date).getDay()]}</small></div>
     <div class="what"><div class="row"><span class="pill p-train">Entreno${typeTxt(s.type||(ev.occ&&ev.occ.type))}</span>${ev.occ&&ev.occ.movedFrom?`<span class="pill p-empty">Movido del ${fmtDay(ev.occ.movedFrom)}</span>`:''}<span class="small muted num">${s.time}–${tfmt(tmin(s.time)+s.duration)} · ${sessTotal(s)}/${s.duration} min${s.att&&(S.roster||[]).length?` · ${S.roster.filter(r=>(s.att[r.id]||'p')==='p').length}/${S.roster.length} jugadores`:''}</span></div>
@@ -2676,6 +2676,13 @@ videoListHTML=function(){const played=S.matches.filter(m=>m.date<=TODAY&&m.us!=n
   return `<div class="view-head"><div><div class="eyebrow">Vídeo</div><h1>Análisis de vídeo</h1></div></div>${card}${prev}${other}
   <span class="small muted">Puedes elegir varios archivos a la vez (por ejemplo, las partes de un partido) y se unen en un solo vídeo. Los vídeos del ordenador no se suben a ningún sitio: la app guarda tus cortes, dibujos y notas.</span>`};
 document.addEventListener('toggle',e=>{const t=e.target;if(t&&t.id==='rv-prev')RV.prevOpen=t.open;if(t&&t.id==='rv-other')RV.otherOpen=t.open},true);
+/* datos de la competición (liga, grupo, jornada, pabellón) van en su sitio, no como «nota» del partido */
+const INFO_RX=/^(Liga|Cadete|Infantil|Junior|Alev|Benj|Copa|Fase)[^·]*·/i;
+function infoFix(o){const fix=ms=>(ms||[]).forEach(m=>{if(m&&m.note&&INFO_RX.test(m.note.trim())){m.info=m.note.trim();m.note='';m.remind=false;delete m.objIdAuto}});
+  fix(o.matches);Object.values(o.teamsData||{}).forEach(t=>fix(t&&t.matches));return o}
+{const _mg=migrate;migrate=function(o){const r=_mg(o)||o;infoFix(r);return r}}
+{const _ms2=matchSheet;matchSheet=function(){const h=_ms2();const m=MD;if(!m||!m.info)return h;const i=h.indexOf('</div>',h.indexOf('sheet-head')>=0?h.indexOf('sheet-head'):0);
+  const line=`<div class="small muted" style="margin-top:-4px">${esc(m.info)}</div>`;const k=h.indexOf('<div class="grid2">');return k<0?line+h:h.slice(0,k)+line+h.slice(k)}}
 const BL_CFG={"url": "https://evwjgeoqttibwfjwuods.supabase.co", "key": "sb_publishable_ny4jgMIz_iRPiLHZ0WEnvQ_Yle4hSG1"};
 /* ---------- DATOS COMPARTIDOS: Claude (versión publicada) o Supabase (app propia) ---------- */
 const SYK=LS+'-sync',SYC='bl';const GKEYS=['exercises','templates','plays','scoutTpls'];

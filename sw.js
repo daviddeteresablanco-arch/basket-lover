@@ -1,7 +1,7 @@
 // Basket Lover: funciona sin conexión.
 // La app (index.html) se pide siempre primero a la carpeta, para ver al momento cada actualización;
 // solo si no hay respuesta se usa la copia guardada.
-const VERSION = 'basket-lover-web-202610281132';
+const VERSION = 'basket-lover-web-202610281216';
 const APP = ['./', './index.html', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png',
   './icons/apple-touch-icon.png', './icons/favicon-32.png', './vendor/supabase.js'];
