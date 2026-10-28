@@ -553,6 +553,7 @@ body.v-big .vtip{background:#e8eef3;color:#05080b}
 .rv-txt{flex:1;min-width:140px}.rv-t{border:1px solid var(--line);background:var(--card,transparent);color:inherit;border-radius:6px;padding:1px 6px;font-size:12px;cursor:pointer}
 .rv-acts{display:flex;gap:2px}.rv-add{display:flex;gap:6px;flex-wrap:wrap}.rv-add input{flex:1;min-width:160px}
 .fi-list{display:grid;gap:2px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px}.fi-row{display:grid;grid-template-columns:3em 1fr auto auto;gap:8px;font-size:13.5px;align-items:baseline}
+.scf td,.scf th{white-space:nowrap}.scf-x{border:0;background:none;color:inherit;cursor:pointer;padding:0 0 0 6px;font-size:14px}
 </style>
 </head>
 <body>
@@ -2533,7 +2534,7 @@ async function fbmReadPdf(file){const lib=await pdfjsLoad();if(!lib)throw new Er
 const fiNorm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 const fiWords=s=>fiNorm(s).split(' ').filter(w=>w.length>2&&!['CLUB','BALONCESTO','BASKET','C B','CB','DEL','LOS','LAS'].includes(w));
 const fiSim=(a,b)=>{const A=fiWords(a),B=new Set(fiWords(b));return A.filter(w=>B.has(w)).length};
-const fiTitle=s=>String(s||'').toLowerCase().replace(/(^|[\s,\-'(])(\p{L})/gu,(m,a,b)=>a+b.toUpperCase());
+const fiTitle=s=>String(s||'').toLowerCase().replace(/(^|[\s,\-'(])(\p{L})/gu,(m,a,b)=>a+b.toUpperCase()).replace(/\b(?:\p{L}\.)+/gu,m=>m.toUpperCase());
 const fiPretty=n=>{const t=fiTitle(n);const p=t.split(',');return p.length===2?(p[1].trim()+' '+p[0].trim()):t};
 function fiOurIdx(R){const ros=S.roster||[];const dors=new Set(ros.map(p=>String(p.dorsal)));
   const sc=R.teams.map(t=>t.players.filter(p=>dors.has(String(p.dorsal))).length*2+fiSim(t.name,S.settings.team+' '+(S.settings.category||''))*3);return sc[1]>sc[0]?1:0}
@@ -2569,6 +2570,49 @@ ACT['fi-go']=()=>{const R=FI.R,our=R.teams[FI.our],riv=R.teams[1-FI.our];let m=F
 /* botones */
 {const _ve=VIEWS.estadisticas;VIEWS.estadisticas=()=>{const h=_ve();if(ST.edit)return h;return h.replace('<h1>Estadísticas</h1></div></div>','<h1>Estadísticas</h1></div><button class="btn btn-s btn-b" data-act="fbm-imp">📄 Importar PDF de la FBM</button></div>')}}
 {const _ms=matchSheet;matchSheet=function(){const h=_ms();const m=MD;if(!m||!m.id||m.date>TODAY)return h;const i=h.indexOf('data-act="st-edit"');if(i<0)return h;const j=h.indexOf('</button>',i)+9;return h.slice(0,j)+` <button class="btn btn-s" data-act="fbm-imp" data-m="${m.id}">📄 Importar PDF de la FBM</button>`+h.slice(j)}}
+/* ---------- Scouting: estadísticas del rival a partir de PDFs de la FBM de sus partidos ---------- */
+const SCF={};
+function scfPick(Rs,rival){const freq={};Rs.forEach(R=>R.teams.forEach(t=>{const k=fiNorm(t.name);freq[k]=(freq[k]||0)+1}));
+  return Rs.map(R=>{const sc=R.teams.map(t=>fiSim(t.name,rival)*10+(freq[fiNorm(t.name)]||0));return sc[1]>sc[0]?1:0})}
+const scfStat=p=>({dorsal:p.dorsal,name:p.name,sec:p.sec,pts:p.pts,t2a:p.t2a,t2i:p.t2i,t3a:p.t3a,t3i:p.t3i,tla:p.tla,tli:p.tli,ro:p.ro,rd:p.rd,as:p.as,rob:p.rob,per:p.per,fc:p.fc});
+async function scfImport(sc,files){let ok=0,bad=0,dup=0;const Rs=[];for(const f of files){try{const R=await fbmReadPdf(f);if(R.teams.length===2&&R.teams.every(t=>t.players.length&&t.tot))Rs.push(R);else bad++}catch(e){if(e&&e.message==='nolib'){toast('No se ha podido cargar el lector de PDF. Comprueba la conexión');return}bad++}}
+  if(!Rs.length){toast('Ningún PDF parece una estadística de partido de la FBM');return}
+  const idx=scfPick(Rs,sc.rival||'');sc.fbm=sc.fbm||{games:[]};
+  Rs.forEach((R,i)=>{const T=R.teams[idx[i]],O=R.teams[1-idx[i]];const key=fiNorm(R.title)+'|'+T.tot.pts+'-'+O.tot.pts;if(sc.fbm.games.some(g=>g.key===key)){dup++;return}
+    sc.fbm.games.push({id:uid(),key,team:T.name,opp:fiTitle(O.name),home:idx[i]===0,pf:T.tot.pts,pa:O.tot.pts,players:T.players.map(scfStat)});ok++;
+    if(!sc.rival)sc.rival=fiTitle(T.name);
+    for(const p of T.players){if(p.dorsal==='X')continue;if(!sc.players.some(x=>String(x.dorsal)===String(p.dorsal)))sc.players.push({id:uid(),dorsal:p.dorsal,name:fiPretty(p.name),pos:'',hand:'',role:'',danger:1,fuertes:[],debiles:[],howto:''})}});
+  save();render();toast(`${ok} ${ok===1?'partido añadido':'partidos añadidos'} al scouting${dup?` · ${dup} ya estaba${dup>1?'n':''}`:''}${bad?` · ${bad} sin leer`:''}`)}
+function scfAgg(sc){const G=(sc.fbm&&sc.fbm.games)||[];const P={};
+  for(const g of G)for(const p of g.players){const k=p.dorsal==='X'?'X:'+p.name+g.id:String(p.dorsal);const a=P[k]=P[k]||{dorsal:p.dorsal,name:p.name,gp:0,sec:0,pts:0,t2a:0,t2i:0,t3a:0,t3i:0,tla:0,tli:0,ro:0,rd:0,as:0,rob:0,per:0,fc:0};
+    if(p.sec>0)a.gp++;['sec','pts','t2a','t2i','t3a','t3i','tla','tli','ro','rd','as','rob','per','fc'].forEach(f=>a[f]+=p[f]||0)}
+  const full=G.some(g=>g.players.some(p=>p.ro||p.rd||p.as||p.rob||p.per));return {G,full,list:Object.values(P).filter(a=>a.gp).sort((a,b)=>b.pts/b.gp-a.pts/a.gp)}}
+const scfAvg=(v,n,d=1)=>n?(v/n).toFixed(d).replace('.',','):'–';const scfPct=(a,i)=>i?Math.round(a*100/i)+'%':'–';
+function scfHTML(sc){const {G,full,list}=scfAgg(sc);const n=G.length;
+  const pf=G.reduce((a,g)=>a+g.pf,0),pa=G.reduce((a,g)=>a+g.pa,0),w=G.filter(g=>g.pf>g.pa).length;
+  return `<section class="card"><div class="row between"><h2>Estadísticas FBM del rival</h2><button class="btn btn-s btn-b" data-act="sc-fbm">📄 Importar PDFs de sus partidos</button></div>
+  ${n?`<div class="row" style="gap:14px;flex-wrap:wrap"><span><b class="num">${n}</b> <span class="small muted">${n===1?'partido':'partidos'}</span></span><span><b class="num">${w}–${n-w}</b> <span class="small muted">balance</span></span><span><b class="num">${scfAvg(pf,n)}</b> <span class="small muted">pts a favor</span></span><span><b class="num">${scfAvg(pa,n)}</b> <span class="small muted">pts en contra</span></span></div>
+  <div class="chips">${G.map(g=>`<span class="chip num">${g.home?'vs':'en'} ${esc(g.opp)} ${g.pf}–${g.pa}<button class="scf-x" data-act="scf-del" data-id="${g.id}" aria-label="Quitar este partido">×</button></span>`).join('')}</div>
+  <div class="tbl-wrap"><table class="tb scf"><thead><tr><th class="stk">Jugador</th><th>PJ</th><th>MIN</th><th>PTS</th><th>T2</th><th>T3</th><th>TL</th>${full?'<th>REB</th><th>AST</th><th>PER</th>':''}<th>FC</th></tr></thead><tbody>
+  ${list.map(a=>`<tr><td class="stk">#${esc(a.dorsal)} ${esc(a.dorsal==='X'?'(sin nombre)':fiPretty(a.name))}</td><td class="num">${a.gp}</td><td class="num">${scfAvg(a.sec/60,a.gp)}</td><td class="num"><b>${scfAvg(a.pts,a.gp)}</b></td>
+    <td class="num">${scfAvg(a.t2a,a.gp)}/${scfAvg(a.t2i,a.gp)} <span class="muted">${scfPct(a.t2a,a.t2i)}</span></td><td class="num">${scfAvg(a.t3a,a.gp)}/${scfAvg(a.t3i,a.gp)} <span class="muted">${scfPct(a.t3a,a.t3i)}</span></td><td class="num">${scfAvg(a.tla,a.gp)}/${scfAvg(a.tli,a.gp)} <span class="muted">${scfPct(a.tla,a.tli)}</span></td>
+    ${full?`<td class="num">${scfAvg(a.ro+a.rd,a.gp)}</td><td class="num">${scfAvg(a.as,a.gp)}</td><td class="num">${scfAvg(a.per,a.gp)}</td>`:''}<td class="num">${scfAvg(a.fc,a.gp)}</td></tr>`).join('')}</tbody></table></div>
+  <span class="small muted">Medias por partido jugado. T2, T3 y TL: anotados/intentados y porcentaje.</span>`
+  :`<span class="small muted">Descarga de la app Afición FBM los PDF de estadística de partidos de este rival (contra cualquier equipo) y súbelos aquí, varios a la vez. Saldrán sus medias por jugador y los jugadores se añaden solos al informe.</span>`}</section>`}
+ACT['sc-fbm']=()=>{let i=$('#scf-file');if(!i){i=document.createElement('input');i.type='file';i.id='scf-file';i.accept='application/pdf,.pdf';i.multiple=true;i.hidden=true;i.dataset.chg='scf-file';document.body.appendChild(i)}i.value='';i.click()};
+CHG['scf-file']=async el=>{const fs=[...(el.files||[])];if(!fs.length)return;const sc=scById(SC.open);if(!sc)return;toast(`Leyendo ${fs.length} ${fs.length===1?'PDF':'PDF'}…`);await scfImport(sc,fs)};
+ACT['scf-del']=el=>{const sc=scById(SC.open);if(!sc||!sc.fbm)return;sc.fbm.games=sc.fbm.games.filter(g=>g.id!==el.dataset.id);save();render()};
+{const _sv=scoutView;scoutView=function(){const h=_sv();const sc=scById(SC.open);if(!sc)return h;const box=scfHTML(sc);const k='<div class="grid2"><label class="f">Rival<input';const i=h.indexOf(k);if(i<0)return h+box;const j=h.indexOf('</div>',h.indexOf('</select></label>',i))+6;return h.slice(0,j)+box+h.slice(j)}}
+/* en «Importar PDF de la FBM» de Estadísticas: si no es un partido de tu equipo, llevarlo al scouting */
+{const _fs=fiSheet;fiSheet=function(){const h=_fs();const R=FI.R;const other=R.teams[1-FI.our];const opts=S.scouts.map(s=>`<option value="${s.id}">${esc(s.rival||'Sin nombre')}</option>`).join('');
+  const box=`<details class="det"><summary>¿No es un partido de tu equipo? Llévalo a un scouting</summary><div class="stack" style="gap:6px;margin-top:8px"><span class="small muted">Por ejemplo, un partido de Fuenlabrada contra otro equipo: sus jugadores y medias van al informe de scouting.</span>
+    <label class="f">Informe de scouting<select id="fi-sc"><option value="new">Nuevo informe</option>${opts}</select></label><button class="btn btn-b" data-act="fi-to-sc">Llevar al scouting</button></div></details>`;
+  const i=h.lastIndexOf('<div class="sheet-foot">');return h.slice(0,i)+box+h.slice(i)}}
+ACT['fi-to-sc']=()=>{const sel=($('#fi-sc')||{}).value||'new';let sc=sel!=='new'&&scById(sel);const R=FI.R;
+  if(!sc){const idx=scfPick([R],'')[0];sc=newReport(S.scoutTpls[0].id,fiTitle(R.teams[idx].name),null,null);S.scouts.unshift(sc)}
+  const T=sc.fbm=sc.fbm||{games:[]};closeSheet();SC.open=sc.id;
+  (async()=>{const f=FI.file;await scfImport(sc,[f]);if(route()!=='scouting')location.hash='scouting';else render()})()};
+{const _ff=CHG['fbm-file'];CHG['fbm-file']=async el=>{FI.file=el.files&&el.files[0];return _ff(el)}}
 /* ---------- VÍDEO: informe del partido (qué mejorar en ataque, en defensa y dónde nos hicieron daño) ---------- */
 const RV_CATS=[['ok','Lo que hicimos bien','Ej.: buena circulación contra la zona, mucha intensidad en defensa'],['atk','Ataque · a mejorar','Ej.: no corremos el contraataque, pocos pases antes de tirar'],['def','Defensa · a mejorar','Ej.: no cerramos el rebote, llegamos tarde a las ayudas'],['dmg','Dónde nos hicieron daño','Ej.: su 4 abierto en el triple, bloqueo directo central']];
 const RV={draft:{},time:{}};
