@@ -554,6 +554,7 @@ body.v-big .vtip{background:#e8eef3;color:#05080b}
 .rv-acts{display:flex;gap:2px}.rv-add{display:flex;gap:6px;flex-wrap:wrap}.rv-add input{flex:1;min-width:160px}
 .fi-list{display:grid;gap:2px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px}.fi-row{display:grid;grid-template-columns:3em 1fr auto auto;gap:8px;font-size:13.5px;align-items:baseline}
 .scf td,.scf th{white-space:nowrap}.scf-x{border:0;background:none;color:inherit;cursor:pointer;padding:0 0 0 6px;font-size:14px}
+.rv-link{display:grid;gap:6px;padding:10px;border:1.5px dashed var(--accent);border-radius:10px}.rv-link select{flex:1;min-width:0}
 </style>
 </head>
 <body>
@@ -2647,6 +2648,23 @@ function rvLastMatch(){return S.matches.filter(m=>m.date<=TODAY&&m.us!=null).sor
     ${v?'':`<span class="small muted">Sube el vídeo y apunta lo que hicisteis bien, qué mejorar en ataque y en defensa, y dónde os hicieron daño.</span><div class="row" style="gap:8px"><button class="btn btn-p" data-act="v-new-file" data-m="${m.id}">📁 Subir vídeo del partido</button><button class="btn" data-act="v-new-yt" data-m="${m.id}">▶ Enlace de YouTube</button></div>`}</section>`})():'';
   return h.replace('<section class="card"><div class="row" style="gap:8px"><button class="btn btn-p" data-act="v-new-file">',card+'<section class="card"><div class="row" style="gap:8px"><button class="btn btn-p" data-act="v-new-file">')}}
 {const _vc=vCounts;vCounts=v=>{const n=rvCount(v);return _vc(v)+(n?` · ${n} ${n===1?'nota':'notas'}`:'')}}
+/* informe: unir el vídeo a su partido desde el propio informe, con sugerencia por el nombre del archivo */
+function rvSuggest(v){const pl=S.matches.filter(m=>m.date<=TODAY).sort((a,b)=>b.date.localeCompare(a.date));const txt=[v.title,v.fileName,...(v.parts||[]).map(p=>p.name)].join(' ');
+  return pl.find(m=>fiSim(m.rival,txt)>0)||null}
+{const _rh=rvHTML;rvHTML=v=>{let h=_rh(v);if(v.matchId&&matchById(v.matchId))return h.replace('</h2>','</h2><button class="btn btn-ghost btn-s" data-act="rv-unlink" title="Cambiar de partido">Cambiar partido</button>');
+  const sug=rvSuggest(v);const pl=S.matches.filter(m=>m.date<=TODAY).sort((a,b)=>b.date.localeCompare(a.date));
+  const box=`<div class="rv-link"><b>¿De qué partido es este vídeo?</b><div class="row" style="gap:6px;flex-wrap:nowrap"><select id="rv-msel" aria-label="Partido">${pl.map(m=>`<option value="${m.id}" ${sug&&sug.id===m.id?'selected':''}>${fmtDay(m.date)} · ${m.home?'vs':'en casa de'} ${esc(m.rival)}${m.us!=null?` (${m.us}–${m.them})`:''}</option>`).join('')}</select><button class="btn btn-s btn-p" data-act="rv-link">Unir</button></div>${sug?`<span class="small muted">Por el nombre del vídeo parece el de ${esc(sug.rival)}.</span>`:''}</div>`;
+  return h.replace(/<span class="small muted">Une este vídeo a un partido[^<]*<\/span>/,box)}}
+ACT['rv-link']=()=>{const v=vById(VA.open);const s=$('#rv-msel');if(!v||!s||!s.value)return;const m=matchById(s.value);v.matchId=m.id;if(!v.scoutId){const sc=S.scouts.find(x=>x.matchId===m.id);if(sc)v.scoutId=sc.id}
+  if(/^(whatsapp video|vid|img|video|mov|dsc)/i.test(v.title||'')||fiSim(m.rival,v.title||'')>0)v.title=`${m.home?'vs':'en casa de'} ${m.rival}`;save();render();{const ti=$('.v-title');if(ti)ti.value=v.title}toast('Vídeo unido al partido '+(m.home?'vs ':'en casa de ')+m.rival)};
+ACT['rv-unlink']=()=>{const v=vById(VA.open);if(!v)return;v.matchId=null;save();vRefresh()};
+/* en la lista: elegir qué partido analizar, no solo el último */
+{const _vl2=videoListHTML;videoListHTML=()=>{const h=_vl2();const pl=S.matches.filter(m=>m.date<=TODAY&&m.us!=null).sort((a,b)=>b.date.localeCompare(a.date));if(!pl.length)return h;
+  const cur=RV.listM&&matchById(RV.listM);if(cur&&cur.id!==(pl[0]||{}).id){/* volver a pintar la tarjeta con el partido elegido */}
+  const sel=`<label class="small muted row" style="gap:6px;align-items:center">Partido<select data-chg="rv-listm" style="width:auto;max-width:100%">${pl.map(m=>`<option value="${m.id}" ${(RV.listM||pl[0].id)===m.id?'selected':''}>${fmtDay(m.date)} · ${m.home?'vs':'en'} ${esc(m.rival)}</option>`).join('')}</select></label>`;
+  return h.replace('<div class="eyebrow">Partido anterior</div>',`<div class="row between"><div class="eyebrow">${RV.listM&&RV.listM!==pl[0].id?'Partido':'Partido anterior'}</div>${sel}</div>`)}}
+CHG['rv-listm']=el=>{RV.listM=el.value;render()};
+{const _lm=rvLastMatch;rvLastMatch=()=>{const m=RV.listM&&matchById(RV.listM);return m||_lm()}}
 const BL_CFG={"url": "https://evwjgeoqttibwfjwuods.supabase.co", "key": "sb_publishable_ny4jgMIz_iRPiLHZ0WEnvQ_Yle4hSG1"};
 /* ---------- DATOS COMPARTIDOS: Claude (versión publicada) o Supabase (app propia) ---------- */
 const SYK=LS+'-sync',SYC='bl';const GKEYS=['exercises','templates','plays','scoutTpls'];
