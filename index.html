@@ -574,6 +574,7 @@ body.v-big .vtip{background:#e8eef3;color:#05080b}
  .pr-sum .pr-plays{grid-template-columns:1fr 1fr 1fr}.pr-sum .pr-board{max-height:62mm;width:auto;max-width:100%;display:block}
  .pr-break{break-before:auto}.pr-f{margin-top:12pt;font-size:8pt;color:#666;text-align:right}
 }
+.ph-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border:1.5px dashed var(--accent);border-radius:10px}.ph-bar input[type=range]{width:120px}
 </style>
 </head>
 <body>
@@ -2665,6 +2666,21 @@ ACT['sc-print']=()=>openSheet(()=>`${sheetHead('Imprimir o guardar en PDF','Info
   <button class="btn" data-act="sc-print-go" data-m="full">Informe completo<span class="small" style="font-weight:400;display:block">Todo el informe: estilo, estadísticas FBM, preguntas y notas.</span></button></div>`);
 ACT['sc-print-go']=el=>scPrint(el.dataset.m);
 {const _sv3=scoutView;scoutView=function(){return _sv3().replace('<button class="btn btn-p btn-s" data-act="sc-copy">Copiar resumen</button>','<div class="row" style="gap:6px"><button class="btn btn-s" data-act="sc-print">🖨 Imprimir / PDF</button><button class="btn btn-p btn-s" data-act="sc-copy">Copiar resumen</button></div>')}}
+/* ---------- Pizarra: foto de una pizarra de verdad como fondo para calcar el ejercicio ---------- */
+const PH={url:null,op:.55,fit:'meet',rot:0};
+ACT['pz-photo']=()=>{let i=$('#pz-photo-in');if(!i){i=document.createElement('input');i.type='file';i.id='pz-photo-in';i.accept='image/*';i.hidden=true;i.dataset.chg='pz-photo';document.body.appendChild(i)}i.value='';i.click()};
+CHG['pz-photo']=el=>{const f=el.files&&el.files[0];if(!f)return;if(PH.url)URL.revokeObjectURL(PH.url);PH.url=URL.createObjectURL(f);PH.op=.55;PH.rot=0;render();toast('Foto de fondo puesta: coloca encima jugadores y flechas siguiendo el dibujo')};
+ACT['ph-off']=()=>{if(PH.url)URL.revokeObjectURL(PH.url);PH.url=null;render()};
+ACT['ph-fit']=()=>{PH.fit=PH.fit==='meet'?'slice':PH.fit==='slice'?'none':'meet';render()};
+ACT['ph-rot']=()=>{PH.rot=(PH.rot+90)%360;render()};
+INP['ph-op']=el=>{PH.op=+el.value/100;const im=$('#pz-bgimg');if(im)im.setAttribute('opacity',PH.op)};
+{const _pv=VIEWS.pizarra;VIEWS.pizarra=()=>{let h=_pv();
+  h=h.replace('<button class="btn btn-s" data-act="pz-img">Imagen</button>','<button class="btn btn-s" data-act="pz-photo" title="Haz una foto a una pizarra y cálcala">📷 Foto de pizarra</button><button class="btn btn-s" data-act="pz-img">Imagen</button>');
+  if(!PH.url)return h;const full=pzFull();const H=full?940:470;const cx=250,cy=H/2;
+  const img=`<image id="pz-bgimg" href="${PH.url}" x="0" y="0" width="500" height="${H}" preserveAspectRatio="xMidYMid ${PH.fit}" opacity="${PH.op}" transform="rotate(${PH.rot} ${cx} ${cy})" style="pointer-events:none"/>`;
+  h=h.replace('<g id="bd-layer"></g>',img+'<g id="bd-layer"></g>');
+  const bar=`<div class="ph-bar"><b class="small">📷 Calcando la foto</b><label class="small row" style="gap:6px;align-items:center">Transparencia<input type="range" min="15" max="100" value="${Math.round(PH.op*100)}" data-inp="ph-op" aria-label="Transparencia de la foto"></label><button class="btn btn-s" data-act="ph-fit">${PH.fit==='meet'?'Ajustar: entera':PH.fit==='slice'?'Ajustar: llenar':'Ajustar: estirar'}</button><button class="btn btn-s" data-act="ph-rot">↻ Girar</button><button class="btn btn-s btn-ghost" data-act="ph-off">Quitar foto</button><span class="small muted">La foto solo se ve en este dispositivo y no se guarda: lo que queda es lo que dibujes encima.</span></div>`;
+  const k='<div id="pz-vars"';const i=h.indexOf(k);return i<0?h:h.slice(0,i)+bar+h.slice(i)}}
 /* ---------- VÍDEO: informe del partido (qué mejorar en ataque, en defensa y dónde nos hicieron daño) ---------- */
 const RV_CATS=[['ok','Lo que hicimos bien','Ej.: buena circulación contra la zona, mucha intensidad en defensa'],['atk','Ataque · a mejorar','Ej.: no corremos el contraataque, pocos pases antes de tirar'],['def','Defensa · a mejorar','Ej.: no cerramos el rebote, llegamos tarde a las ayudas'],['dmg','Dónde nos hicieron daño','Ej.: su 4 abierto en el triple, bloqueo directo central']];
 const RV={draft:{},time:{}};
