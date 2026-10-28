@@ -547,6 +547,11 @@ body.v-big .vtip{background:#e8eef3;color:#05080b}
 .sbg-card h2{margin:6px 0 0;font-size:22px}.sbg-card .btn{width:100%;justify-content:center}
 .sbg-brand{display:flex;align-items:center;gap:10px;font-size:20px}.sbg-brand .mark{width:36px;height:36px}
 .team-share{display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
+.rv{gap:10px}.rv-cat{display:grid;gap:6px;padding:10px;border-radius:10px;background:var(--surface-2,rgba(127,127,127,.06));border-left:3px solid var(--blue)}
+.rv-def{border-left-color:var(--good,#1d7a46)}.rv-dmg{border-left-color:var(--bad)}
+.rv-h{display:flex;justify-content:space-between;align-items:baseline}.rv-note{display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap;font-size:14px}
+.rv-txt{flex:1;min-width:140px}.rv-t{border:1px solid var(--line);background:var(--card,transparent);color:inherit;border-radius:6px;padding:1px 6px;font-size:12px;cursor:pointer}
+.rv-acts{display:flex;gap:2px}.rv-add{display:flex;gap:6px;flex-wrap:wrap}.rv-add input{flex:1;min-width:160px}
 </style>
 </head>
 <body>
@@ -2503,6 +2508,40 @@ INP['set-f']=el=>{SET[el.dataset.k]=el.value};
 ACT['set-save']=()=>{if(SET.slots.some(x=>tmin(x.end)<=tmin(x.start))){toast('Revisa las horas: alguna termina antes de empezar');return}SET.slots.forEach(x=>{x.type=(x.type||'').trim()||'Pista'});SET.slots.sort((a,b)=>a.dow-b.dow||a.start.localeCompare(b.start));delete SET._empty;delete SET._reset;S.settings=SET;save();closeSheet();render();toast('Ajustes guardados')};
 ACT['set-reset']=()=>{if(!SET._reset){SET._reset=true;renderSheet();return}S=seed();save();pzReset();closeSheet();render();toast('Datos de ejemplo restablecidos')};
 
+/* ---------- VÍDEO: informe del partido (qué mejorar en ataque, en defensa y dónde nos hicieron daño) ---------- */
+const RV_CATS=[['atk','Ataque · a mejorar','Ej.: no corremos el contraataque, pocos pases antes de tirar'],['def','Defensa · a mejorar','Ej.: no cerramos el rebote, llegamos tarde a las ayudas'],['dmg','Dónde nos hicieron daño','Ej.: su 4 abierto en el triple, bloqueo directo central']];
+const RV={draft:{},time:{}};
+const rvOf=v=>{v.review=v.review||{};RV_CATS.forEach(([k])=>{if(!Array.isArray(v.review[k]))v.review[k]=[]});return v.review};
+const rvCount=v=>v.review?RV_CATS.reduce((a,[k])=>a+((v.review[k]||[]).length),0):0;
+function rvHTML(v){const r=rvOf(v);const m=v.matchId&&matchById(v.matchId);const now=VA.P?fmtT(VA.P.t()):null;
+  return `<section class="card rv"><div class="row between"><h2>Informe del partido</h2>${m&&m.us!=null?`<span class="pill ${m.us>m.them?'p-win':'p-loss'} num">${m.us}–${m.them}</span>`:''}</div>
+  ${m?`<span class="small muted">${fmtDay(m.date)} · ${m.home?'vs':'en casa de'} ${esc(m.rival)}</span>`:`<span class="small muted">Une este vídeo a un partido en «Datos del análisis» para verlo también desde el partido.</span>`}
+  ${RV_CATS.map(([k,l,ph])=>`<div class="rv-cat rv-${k}"><div class="rv-h"><b>${l}</b><span class="num muted small">${r[k].length}</span></div>
+    ${r[k].map(n=>`<div class="rv-note">${n.t!=null?`<button class="rv-t num" data-act="v-goto" data-t="${n.t}" title="Ir a ese momento">${fmtT(n.t)}</button>`:''}<span class="rv-txt">${esc(n.txt)}</span>
+      <span class="rv-acts"><button class="btn btn-ghost btn-s" data-act="rv-obj" data-k="${k}" data-id="${n.id}" title="Crear un objetivo de este mes con esta nota">${n.obj?'✓ Objetivo':'→ Objetivo'}</button><button class="btn btn-ghost btn-s" data-act="rv-del" data-k="${k}" data-id="${n.id}" aria-label="Borrar nota">✕</button></span></div>`).join('')}
+    <div class="rv-add"><input type="text" id="rv-in-${k}" data-inp="rv-in" data-k="${k}" value="${esc(RV.draft[k]||'')}" placeholder="${esc(ph)}" aria-label="Nueva nota: ${esc(l)}">
+      <button class="btn btn-s btn-p" data-act="rv-add" data-k="${k}">Añadir</button>${VA.P?`<button class="btn btn-s" data-act="rv-add" data-k="${k}" data-at="1" title="Añadir la nota con el momento actual del vídeo">⏱ Aquí</button>`:''}</div></div>`).join('')}
+  <span class="small muted">«⏱ Aquí» guarda la nota con el segundo del vídeo: luego tocas la hora y vas directo a esa jugada.</span></section>`}
+INP['rv-in']=el=>{RV.draft[el.dataset.k]=el.value};
+ACT['rv-add']=el=>{const v=vById(VA.open);if(!v)return;const k=el.dataset.k;const i=$('#rv-in-'+k);const txt=((i&&i.value)||RV.draft[k]||'').trim();if(!txt){toast('Escribe la nota primero');if(i)i.focus();return}
+  const n={id:uid(),txt};if(el.dataset.at&&VA.P){n.t=Math.round(VA.P.t()*10)/10}rvOf(v)[k].push(n);RV.draft[k]='';save();vRefresh();const j=$('#rv-in-'+k);if(j)j.focus()};
+ACT['rv-del']=el=>{const v=vById(VA.open);if(!v)return;const r=rvOf(v);r[el.dataset.k]=r[el.dataset.k].filter(n=>n.id!==el.dataset.id);save();vRefresh()};
+ACT['rv-obj']=el=>{const v=vById(VA.open);if(!v)return;const n=rvOf(v)[el.dataset.k].find(x=>x.id===el.dataset.id);if(!n)return;if(n.obj){toast('Ya es un objetivo de este mes');return}
+  const m=v.matchId&&matchById(v.matchId);const cat=RV_CATS.find(c=>c[0]===el.dataset.k)[1];
+  const o={id:uid(),month:monthKey(TODAY),title:n.txt.slice(0,90),detail:`Del vídeo${m?` ${m.home?'vs':'en casa de'} ${m.rival}`:''} (${cat})${n.t!=null?' · minuto '+fmtT(n.t):''}`,status:'pendiente',fromMatch:m?m.id:null};
+  S.objectives.push(o);n.obj=o.id;save();vRefresh();toast('Objetivo creado para este mes')};
+/* Enter en el campo = añadir */
+document.addEventListener('keydown',e=>{const t=e.target;if(e.key==='Enter'&&t&&t.dataset&&t.dataset.inp==='rv-in'){e.preventDefault();ACT['rv-add']({dataset:{k:t.dataset.k}})}});
+{const _vs=vSideHTML;vSideHTML=v=>rvHTML(v)+_vs(v)}
+/* en la lista: acceso directo al último partido */
+function rvLastMatch(){return S.matches.filter(m=>m.date<=TODAY&&m.us!=null).sort((a,b)=>b.date.localeCompare(a.date))[0]}
+{const _vl=videoListHTML;videoListHTML=()=>{let h=_vl();const m=rvLastMatch();
+  const card=m?(()=>{const v=S.videos.find(x=>x.matchId===m.id);return `<section class="card rv-last"><div class="eyebrow">Partido anterior</div>
+    <div class="row between"><div style="min-width:0"><b>${m.home?'vs':'en casa de'} ${esc(m.rival)}</b> <span class="num">${m.us}–${m.them}</span><br><span class="small muted">${fmtDay(m.date)}${v?` · ${vCounts(v)}`:''}</span></div>
+    ${v?`<button class="btn btn-p" data-act="v-open" data-id="${v.id}">Abrir análisis</button>`:''}</div>
+    ${v?'':`<span class="small muted">Sube el vídeo y apunta qué mejorar en ataque, en defensa y dónde os hicieron daño.</span><div class="row" style="gap:8px"><button class="btn btn-p" data-act="v-new-file" data-m="${m.id}">📁 Subir vídeo del partido</button><button class="btn" data-act="v-new-yt" data-m="${m.id}">▶ Enlace de YouTube</button></div>`}</section>`})():'';
+  return h.replace('<section class="card"><div class="row" style="gap:8px"><button class="btn btn-p" data-act="v-new-file">',card+'<section class="card"><div class="row" style="gap:8px"><button class="btn btn-p" data-act="v-new-file">')}}
+{const _vc=vCounts;vCounts=v=>{const n=rvCount(v);return _vc(v)+(n?` · ${n} ${n===1?'nota':'notas'}`:'')}}
 const BL_CFG={"url": "https://evwjgeoqttibwfjwuods.supabase.co", "key": "sb_publishable_ny4jgMIz_iRPiLHZ0WEnvQ_Yle4hSG1"};
 /* ---------- DATOS COMPARTIDOS: Claude (versión publicada) o Supabase (app propia) ---------- */
 const SYK=LS+'-sync',SYC='bl';const GKEYS=['exercises','templates','plays','scoutTpls'];
@@ -2557,7 +2596,7 @@ function syOnRemote(R,size){SY.remote=R;
   syStatus(SY.ro?'ro':'ok');if(SH&&SH.render!==teamsSheet){SY.pending=true;return}syApply()}
 function syStart(B){SY.db=B;SY.ready=false;B.start(syOnRemote,()=>{syStatus('off')})}
 /* --- Claude: base de datos del artifact --- */
-async function syClaude(){syStatus('wait');let db=null;try{db=await claude.use('db')}catch(e){}
+async function syClaude(){{const v=$('#view');if(v&&!$('#old-ver')){const el=document.createElement('div');el.id='old-ver';el.className='cu-msg bad';el.innerHTML='<b>Esta es la versión antigua de Basket Lover.</b> Lo que metas aquí no llega al móvil ni a los demás entrenadores. Usa la app nueva: <a href="https://daviddeteresablanco-arch.github.io/basket-lover/" target="_blank" rel="noopener">daviddeteresablanco-arch.github.io/basket-lover</a>';v.parentNode.insertBefore(el,v)}}syStatus('wait');let db=null;try{db=await claude.use('db')}catch(e){}
   if(!db){const el=$('#sync-dot');if(el)el.hidden=true;return}
   try{const u=await claude.use('user');if(u&&typeof u.can==='function'&&(await u.can('data.write'))===false)SY.ro=true}catch(e){}
   const col=db.collection(SYC);
