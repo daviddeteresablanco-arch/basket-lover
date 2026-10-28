@@ -575,6 +575,7 @@ body.v-big .vtip{background:#e8eef3;color:#05080b}
  .pr-break{break-before:auto}.pr-f{margin-top:12pt;font-size:8pt;color:#666;text-align:right}
 }
 .ph-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border:1.5px dashed var(--accent);border-radius:10px}.ph-bar input[type=range]{width:120px}
+.pf-bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.pf-new{display:inline-flex;gap:4px;align-items:center}.pf-new input{width:200px;max-width:60vw}.pf-add{border-style:dashed}.pf-mv{padding:0 10px 10px}.pf-mv select{width:100%;font-size:12.5px;padding:4px 6px}
 </style>
 </head>
 <body>
@@ -2771,10 +2772,10 @@ function syKeep(){try{localStorage.setItem(SYK,JSON.stringify(SY.last))}catch(e)
 function syStatus(st){SY.st=st;const el=$('#sync-dot');if(!el)return;el.hidden=false;el.className='sync-dot '+st;
   el.innerHTML='<b aria-hidden="true">☁</b><span>'+(st==='ok'?'Compartido':st==='saving'?'Guardando…':st==='off'?'Sin conexión':st==='ro'?'Solo lectura':st==='login'?'Entrar':'Conectando…')+'</span>';el.setAttribute('aria-label',el.textContent.slice(1));
   el.title=st==='off'?'Sin conexión: tus cambios se guardan aquí y se subirán solos al volver la conexión':st==='ro'?'Puedes ver los datos, pero no cambiarlos':st==='login'?'Entra con tu cuenta para compartir los datos con tu equipo de entrenadores':'Los datos se comparten con los demás entrenadores de tu grupo'}
-const syOwn=id=>!SY.db||!SY.db.owns||SY.db.owns(id);
+const syOwn=(id,d)=>!SY.db||!SY.db.owns||SY.db.owns(id,d);
 async function syPush(){if(!SY.db||!SY.ready||SY.ro)return;if(SY.busy){SY.again=true;return}SY.busy=true;let fail=false;
   try{const cur=syDocs();const ops=[];
-    for(const[id,d] of Object.entries(cur)){if(!syOwn(id))continue;const j=syJ(d);if(SY.last[id]!==j)ops.push([id,d,j])}
+    for(const[id,d] of Object.entries(cur)){if(!syOwn(id,d))continue;const j=syJ(d);if(SY.last[id]!==j)ops.push([id,d,j])}
     for(const id of Object.keys(SY.last)){if(!cur[id]&&syOwn(id))ops.push([id,null,null])}
     if(ops.length)syStatus('saving');
     for(const[id,d,j] of ops){if(j&&j.length>250000){toast('Hay un elemento demasiado grande para compartirlo');continue}
@@ -2836,14 +2837,14 @@ function sbBackend(){const cli=SB.cli;let cb=null;
   const refresh=async()=>{try{await sbLoadSpaces();for(const sp of SB.spaces)await fetchSpace(sp);for(const k of Object.keys(SB.RS))if(!SB.spaces.some(s=>s.id===k))delete SB.RS[k];listen();emit()}catch(e){syStatus('off')}};
   const listen=()=>{for(const sp of SB.spaces){if(SB.chs[sp.id])continue;SB.chs[sp.id]=cli.channel('bl-'+sp.id).on('postgres_changes',{event:'*',schema:'public',table:'bl_docs',filter:'space=eq.'+sp.id},p=>{const D=SB.RS[sp.id]=SB.RS[sp.id]||{};if(p.eventType==='DELETE'){if(p.old&&p.old.id)delete D[p.old.id]}else if(p.new&&p.new.id)D[p.new.id]=p.new.body;emit()}).subscribe()}
     for(const k of Object.keys(SB.chs))if(!SB.spaces.some(s=>s.id===k)){try{cli.removeChannel(SB.chs[k])}catch(e){}delete SB.chs[k]}};
-  const targets=id=>{if(id==='g:teams')return[];const t=sbTeamOf(id);if(t){const sp=sbSpaceOfTeam(t);return sp?[sp]:[]}return SB.spaces.filter(s=>s.team)};
+  const targets=(id,d)=>{if(id==='g:teams')return[];const t=sbTeamOf(id);if(t){const sp=sbSpaceOfTeam(t);return sp?[sp]:[]}if(/^g:(plays|playFolders):/.test(id)){let b=d;if(!b&&SY.last[id]){try{b=JSON.parse(SY.last[id])}catch(e){}}const tm=b&&b.v&&b.v.team;if(tm){const sp=sbSpaceOfTeam(syId(tm));return sp?[sp]:[]}}return SB.spaces.filter(s=>s.team)};
   const B={kind:'supabase',refresh,
-    owns:id=>targets(id).length>0,
+    owns:(id,d)=>targets(id,d).length>0,
     async start(c,err){cb=c;try{for(const sp of SB.spaces)await fetchSpace(sp);const R=union();cb(R,Object.keys(R).length)}catch(e){err(e);setTimeout(()=>{if(SY.db===B)syStart(sbBackend())},20000);return}
       listen();document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&SY.db===B)refresh()});window.addEventListener('online',()=>{if(SY.db===B)refresh()});
       clearInterval(SB.iv);SB.iv=setInterval(()=>{if(document.visibilityState==='visible'&&SY.db===B)refresh()},120000)},
-    async set(id,d){for(const sp of targets(id)){const{error}=await cli.from('bl_docs').upsert({space:sp.id,id,body:d,updated_at:new Date().toISOString()});if(error){if(/row-level|permission|policy/i.test(error.message||''))throw{code:'denied'};throw error}(SB.RS[sp.id]=SB.RS[sp.id]||{})[id]=d}},
-    async del(id){for(const sp of targets(id)){const{error}=await cli.from('bl_docs').delete().eq('space',sp.id).eq('id',id);if(error)throw error;if(SB.RS[sp.id])delete SB.RS[sp.id][id]}}};
+    async set(id,d){const tg=targets(id,d);for(const sp of SB.spaces){if(!tg.includes(sp)&&SB.RS[sp.id]&&SB.RS[sp.id][id]){await cli.from('bl_docs').delete().eq('space',sp.id).eq('id',id);delete SB.RS[sp.id][id]}}for(const sp of tg){const{error}=await cli.from('bl_docs').upsert({space:sp.id,id,body:d,updated_at:new Date().toISOString()});if(error){if(/row-level|permission|policy/i.test(error.message||''))throw{code:'denied'};throw error}(SB.RS[sp.id]=SB.RS[sp.id]||{})[id]=JSON.parse(JSON.stringify(d))}},
+    async del(id){for(const sp of SB.spaces.filter(s=>s.team&&((SB.RS[s.id]||{})[id]||targets(id).includes(s)))){const{error}=await cli.from('bl_docs').delete().eq('space',sp.id).eq('id',id);if(error)throw error;if(SB.RS[sp.id])delete SB.RS[sp.id][id]}}};
   return B}
 function sbStop(){for(const k of Object.keys(SB.chs)){try{SB.cli.removeChannel(SB.chs[k])}catch(e){}}SB.chs={};clearInterval(SB.iv)}
 /* compartir un equipo, unirse con código, dejar un equipo */
@@ -2981,6 +2982,43 @@ ACT['ph-ai']=async()=>{if(!PH.url)return;if(!SB.cli||!SB.user){toast('Para recon
   catch(e){const m=String(e.message||e);toast(/429|quota|rate/i.test(m)?'Se ha llegado al límite gratis de hoy. Prueba más tarde o cálcala a mano':/GEMINI_API_KEY/.test(m)?'Falta configurar la clave de Google en Supabase':/Failed to send|fetch|network/i.test(m)?'No hay conexión o la función no está creada todavía':'No se ha podido reconocer: '+m.slice(0,90))}
   finally{PH.busy=false;render()}};
 {const _pv2=VIEWS.pizarra;VIEWS.pizarra=()=>{const h=_pv2();if(!PH.url)return h;return h.replace('<b class="small">📷 Calcando la foto</b>',`<b class="small">📷 Calcando la foto</b><button class="btn btn-s btn-p" data-act="ph-ai" ${PH.busy?'disabled':''}>${PH.busy?'Reconociendo…':'✨ Reconocer automáticamente'}</button>`)}}
+/* ---------- Pizarra: carpetas de jugadas (una por equipo, generales, rivales y carpetas propias) ---------- */
+GKEYS.push('playFolders');
+{const _mg2=migrate;migrate=function(o){const r=_mg2(o)||o;if(!Array.isArray(r.playFolders))r.playFolders=[];return r}}
+const PF={cur:null,newName:'',adding:false,confDel:null};
+const pfTeamName=id=>{const t=teamInfo(id);return t.cat||t.name||'Equipo'};
+function pfCur(){if(PF.cur&&(PF.cur==='gen'||PF.cur==='riv'||PF.cur==='all'||PF.cur.startsWith('t:')&&S.teams.some(t=>'t:'+t.id===PF.cur)||(S.playFolders||[]).some(f=>f.id===PF.cur)))return PF.cur;const t='t:'+S.teamId;if(!S.plays.some(p=>pfIn(p,t))&&S.plays.some(p=>pfIn(p,'gen')))return 'gen';return t}
+function pfIn(p,c){if(c==='all')return true;if(c==='riv')return !!p.scoutId;if(p.scoutId)return false;if(c==='gen')return !p.team&&!p.folder;if(c.startsWith('t:'))return p.team===c.slice(2)&&!p.folder;return p.folder===c}
+function pfLabel(c){if(c==='all')return 'Todas';if(c==='riv')return 'Rivales';if(c==='gen')return 'Generales';if(c.startsWith('t:'))return pfTeamName(c.slice(2));const f=(S.playFolders||[]).find(x=>x.id===c);return f?f.name:'Carpeta'}
+function pfOptions(p){const o=[...S.teams.map(t=>['t:'+t.id,'Equipo · '+pfTeamName(t.id)]),...(S.playFolders||[]).map(f=>[f.id,'📁 '+f.name+(f.team?' ('+pfTeamName(f.team)+')':'')]),['gen','Generales (todos los equipos)']];
+  const cur=p.folder||(p.team?'t:'+p.team:'gen');return `<select class="pf-move" data-chg="pf-move" data-id="${p.id}" aria-label="Mover la jugada a otra carpeta">${o.map(([v,l])=>`<option value="${v}" ${v===cur?'selected':''}>${esc(l)}</option>`).join('')}</select>`}
+function pfCard(p){const n=p.notes||{};const has=['danger','defend','keys'].filter(k=>(n[k]||'').trim()).length;
+  return `<div class="ex"><button class="fav" data-act="pz-delplay" data-id="${p.id}" aria-label="Borrar jugada" style="font-size:15px">×</button><button data-act="pz-load" data-id="${p.id}" style="all:unset;cursor:pointer;display:flex;flex-direction:column">${thumb(p.board)}<div class="body"><b>${esc(p.name)}</b><span class="small muted">${p.scoutId&&scById(p.scoutId)?'Rival '+esc(scById(p.scoutId).rival)+' · ':''}${esc(p.kind)} · ${p.board.court==='full'?'Pista completa':'Media pista'} · ${p.board.vars&&p.board.vars.length>1?p.board.vars.length+' variantes':p.board.frames.length+' '+(p.board.frames.length===1?'paso':'pasos')}</span>${has?`<span class="small" style="color:var(--blue);font-weight:600">✎ ${has} ${has===1?'nota':'notas'}</span>`:''}</div></button>${p.scoutId?'':`<div class="pf-mv">${pfOptions(p)}</div>`}</div>`}
+function pfHTML(){const c=pfCur();const cnt=x=>S.plays.filter(p=>pfIn(p,x)).length;
+  const chips=[...S.teams.map(t=>'t:'+t.id),...(S.playFolders||[]).map(f=>f.id),'gen','riv','all'].filter((x,i,a)=>a.indexOf(x)===i);
+  const list=S.plays.filter(p=>pfIn(p,c));const custom=(S.playFolders||[]).find(f=>f.id===c);
+  return `<h2 class="sec">Jugadas</h2>
+  <div class="pf-bar">${chips.map(x=>{const n=cnt(x);if(!n&&(x==='riv'||x==='gen')&&x!==c)return '';return `<button class="chip ${x===c?'on':''}" data-act="pf-go" data-c="${x}">${x.startsWith('t:')?'🏀 ':x==='riv'?'🔍 ':x==='all'||x==='gen'?'':'📁 '}${esc(pfLabel(x))} <span class="num muted">${n}</span></button>`}).join('')}
+   ${PF.adding?`<span class="pf-new"><input type="text" id="pf-name" data-inp="pf-name" value="${esc(PF.newName)}" placeholder="Nombre: ej. Saques de banda" aria-label="Nombre de la carpeta"><button class="btn btn-s btn-p" data-act="pf-create">Crear</button><button class="btn btn-s btn-ghost" data-act="pf-cancel">✕</button></span>`:`<button class="chip pf-add" data-act="pf-add">+ Carpeta</button>`}</div>
+  ${custom?`<div class="row between"><span class="small muted">Carpeta${custom.team?' del '+esc(pfTeamName(custom.team)):' general'}</span><button class="btn btn-s btn-ghost" data-act="pf-del" data-id="${custom.id}">${PF.confDel===custom.id?'¿Seguro? Las jugadas pasan a su equipo':'Borrar carpeta'}</button></div>`:''}
+  <div class="plays">${list.length?list.map(pfCard).join(''):`<div class="empty" style="grid-column:1/-1">${c==='riv'?'Aquí salen las jugadas que dibujes desde un informe de scouting.':'No hay jugadas en esta carpeta. Dibuja una arriba y pulsa Guardar: se guarda aquí.'}</div>`}</div>
+  <p class="small muted">Las jugadas de un equipo solo las ven los entrenadores de ese equipo. Las de «Generales» las ven los de todos tus equipos.</p>`}
+{const _pv3=VIEWS.pizarra;VIEWS.pizarra=()=>{const h=_pv3();const a=h.indexOf('<h2 class="sec">Jugadas guardadas</h2>');if(a<0)return h;const b=h.indexOf('<p class="small muted">Los ejercicios que dibujes',a);if(b<0)return h;return h.slice(0,a)+pfHTML()+h.slice(b)}}
+ACT['pf-go']=el=>{PF.cur=el.dataset.c;PF.confDel=null;render()};
+ACT['pf-add']=()=>{PF.adding=true;PF.newName='';render();setTimeout(()=>{const i=$('#pf-name');if(i)i.focus()},30)};
+ACT['pf-cancel']=()=>{PF.adding=false;render()};
+INP['pf-name']=el=>{PF.newName=el.value};
+ACT['pf-create']=()=>{const n=(PF.newName||'').trim();if(!n){toast('Ponle nombre a la carpeta');return}const c=pfCur();const team=c.startsWith('t:')?c.slice(2):c==='gen'?null:((S.playFolders||[]).find(f=>f.id===c)||{}).team||S.teamId;
+  const f={id:uid(),name:n.slice(0,40),team:team||null};S.playFolders=S.playFolders||[];S.playFolders.push(f);PF.adding=false;PF.cur=f.id;save();render();toast('Carpeta creada: '+f.name)};
+ACT['pf-del']=el=>{const id=el.dataset.id;if(PF.confDel!==id){PF.confDel=id;render();return}const f=S.playFolders.find(x=>x.id===id);S.plays.forEach(p=>{if(p.folder===id){delete p.folder;p.team=f&&f.team||p.team}});S.playFolders=S.playFolders.filter(x=>x.id!==id);PF.cur=f&&f.team?'t:'+f.team:'gen';PF.confDel=null;save();render();toast('Carpeta borrada')};
+CHG['pf-move']=el=>{const p=S.plays.find(x=>x.id===el.dataset.id);if(!p)return;const v=el.value;
+  if(v==='gen'){delete p.team;delete p.folder}else if(v.startsWith('t:')){p.team=v.slice(2);delete p.folder}else{const f=S.playFolders.find(x=>x.id===v);p.folder=v;if(f&&f.team)p.team=f.team;else delete p.team}
+  save();render();toast('Jugada movida a '+pfLabel(v))};
+{const _ss=saveSheet;saveSheet=function(){const h=_ss();if(PD.dest!=='play'||PD.id)return h;const c=pfCur();const where=c==='all'||c==='riv'?pfLabel('t:'+S.teamId):pfLabel(c);return h.replace('<div class="sheet-foot">',`<p class="small muted">Se guarda en la carpeta <b>${esc(where)}</b>. Luego puedes moverla.</p><div class="sheet-foot">`)}}
+/* al guardar una jugada nueva, queda en la carpeta que estás viendo */
+{const _ps=ACT['pd-save'];ACT['pd-save']=el=>{const before=new Set(S.plays.map(p=>p.id));const r=_ps(el);const c=pfCur();
+  S.plays.filter(p=>!before.has(p.id)&&!p.scoutId).forEach(p=>{if(c.startsWith('t:'))p.team=c.slice(2);else if(c==='gen'||c==='all'||c==='riv')p.team=c==='gen'?undefined:S.teamId;else{const f=S.playFolders.find(x=>x.id===c);p.folder=c;if(f&&f.team)p.team=f.team}if(p.team===undefined)delete p.team});
+  if(S.plays.some(p=>!before.has(p.id))){save();render()}return r}}
 
 /* ---------- APP: copia de seguridad, almacenamiento persistente y modo sin conexión ---------- */
 ACT['bk-export']=()=>{try{const blob=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='basket-lover-copia-'+TODAY+'.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);toast('Copia descargada')}catch(e){toast('No se ha podido descargar la copia')}};
