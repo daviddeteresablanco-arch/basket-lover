@@ -41,29 +41,51 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Método no permitido" }, 405);
   try {
     const auth = req.headers.get("Authorization") || "";
-    const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: auth } } });
-    const { data: { user } } = await sb.auth.getUser();
+    let pub = Deno.env.get("SUPABASE_ANON_KEY") || "";
+    if (!pub) { try { pub = String(Object.values(JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") || "{}"))[0] || ""); } catch (_) { /* nada */ } }
+    const sb = createClient(Deno.env.get("SUPABASE_URL")!, pub);
+    const token = auth.replace(/^Bearer\s+/i, "");
+    const { data: { user } } = token ? await sb.auth.getUser(token) : { data: { user: null } };
     if (!user) return json({ error: "Entra con tu cuenta para usar esta opción" }, 401);
 
     const key = Deno.env.get("GEMINI_API_KEY");
     if (!key) return json({ error: "Falta la clave GEMINI_API_KEY en Supabase" }, 500);
-    const model = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
-
     const { image, mime } = await req.json();
     if (!image || typeof image !== "string" || image.length > 8_000_000) return json({ error: "Imagen no válida o demasiado grande" }, 400);
 
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: PROMPT }, { inline_data: { mime_type: mime || "image/jpeg", data: image } }] }],
-        generationConfig: { temperature: 0.1, response_mime_type: "application/json", response_schema: SCHEMA },
-      }),
+    const body = JSON.stringify({
+      contents: [{ parts: [{ text: PROMPT }, { inline_data: { mime_type: mime || "image/jpeg", data: image } }] }],
+      generationConfig: { temperature: 0.1, response_mime_type: "application/json", response_schema: SCHEMA },
     });
-    const j = await r.json();
-    if (!r.ok) return json({ error: (j && j.error && j.error.message) || "Error de Google" }, r.status === 429 ? 429 : 502);
+    const call = (m: string) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body });
+    // probar modelos hasta dar con uno que funcione en el plan gratis
+    const zero = (x: { error?: { message?: string } }) => /limit:\s*0\b/.test((x && x.error && x.error.message) || "");
+    const cands: string[] = [];
+    const env = Deno.env.get("GEMINI_MODEL");
+    if (env) cands.push(env);
+    cands.push("gemini-flash-latest", "gemini-flash-lite-latest");
+    let listed = false;
+    let model = "", r: Response | null = null, j: any = null;
+    for (let i = 0; i < cands.length && i < 10; i++) {
+      model = cands[i];
+      r = await call(model); j = await r.json();
+      if (r.ok) break;
+      if (r.status === 429 && !zero(j)) break; // límite real del plan gratis: no seguir gastando
+      if (!listed) {
+        listed = true;
+        const lr = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", { headers: { "x-goog-api-key": key } });
+        const lj = await lr.json();
+        const more = (lj.models || []).filter((m: { name: string; supportedGenerationMethods?: string[] }) =>
+          /flash/i.test(m.name) && !/image|tts|audio|live|exp|preview|omni/i.test(m.name) && (m.supportedGenerationMethods || []).includes("generateContent"))
+          .map((m: { name: string }) => m.name.replace(/^models\//, ""))
+          .sort((x: string, y: string) => y.localeCompare(x, undefined, { numeric: true }));
+        for (const m of more) if (!cands.includes(m)) cands.push(m);
+      }
+    }
+    r = r as Response;
+    if (!r.ok) return json({ error: (j && j.error && j.error.message) || "Error de Google", model }, r.status === 429 ? 429 : 502);
     const txt = (j.candidates?.[0]?.content?.parts || []).map((p: { text?: string }) => p.text || "").join("") || "{}";
-    return json(JSON.parse(txt));
+    return json({ ...JSON.parse(txt), _model: model });
   } catch (e) {
     return json({ error: String(e) }, 500);
   }

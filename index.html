@@ -2971,8 +2971,10 @@ function phToBoard(R){const full=R.court==='full';const W=500,H=full?940:470;con
     const kind=['corte','pase','bote','bloqueo'].includes(a.type)?a.type:'corte';const tgt=kind==='pase'?near(tx,ty,full?80:60):null;specs.push(tgt&&tgt!==s?[kind,s.id,0,0,tgt.id]:[kind,s.id,tx,ty])});
   const b=BD(tokens,specs);if(full)b.court='full';return {b,skipped,n:tokens.length,na:specs.length}}
 ACT['ph-ai']=async()=>{if(!PH.url)return;if(!SB.cli||!SB.user){toast('Para reconocerla automáticamente, entra con tu cuenta (pulsa la nube de arriba)');return}if(PH.busy)return;
-  PH.busy=true;render();try{const image=await phImageB64(PH.url);const {data,error}=await SB.cli.functions.invoke('pizarra-ia',{body:{image,mime:'image/jpeg'}});
-    if(error){let m='';try{const j=await error.context.json();m=j.error||''}catch(e){}throw new Error(m||error.message||'error')}
+  PH.busy=true;render();try{const image=await phImageB64(PH.url);const {data:ses}=await SB.cli.auth.getSession();const tok=ses&&ses.session&&ses.session.access_token;if(!tok)throw new Error('Entra con tu cuenta');
+    const ac=new AbortController();const to=setTimeout(()=>ac.abort(),90000);let data;
+    try{const res=await fetch(BL_CFG.url+'/functions/v1/pizarra-ia',{method:'POST',signal:ac.signal,headers:{'Content-Type':'application/json',apikey:BL_CFG.key,Authorization:'Bearer '+tok},body:JSON.stringify({image,mime:'image/jpeg'})});data=await res.json().catch(()=>null);if(!res.ok)throw new Error((data&&data.error)||('Error '+res.status))}
+    catch(e){if(e&&e.name==='AbortError')throw new Error('Ha tardado demasiado. Prueba otra vez');throw e}finally{clearTimeout(to)}
     if(!data||data.error)throw new Error((data&&data.error)||'Sin respuesta');
     const {b,skipped,n,na}=phToBoard(data);if(!n){toast('No he encontrado jugadores en la foto. Prueba con una foto de frente y con buena luz');return}
     pushHist();PZ.board=b;PZ.fi=0;PH.op=.3;render();toast(`Listo: ${n} ${n===1?'elemento':'elementos'} y ${na} ${na===1?'flecha':'flechas'}${skipped?` (${skipped} sin colocar)`:''}. Revísalo y retoca lo que haga falta`)}
