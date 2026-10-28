@@ -548,10 +548,11 @@ body.v-big .vtip{background:#e8eef3;color:#05080b}
 .sbg-brand{display:flex;align-items:center;gap:10px;font-size:20px}.sbg-brand .mark{width:36px;height:36px}
 .team-share{display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
 .rv{gap:10px}.rv-cat{display:grid;gap:6px;padding:10px;border-radius:10px;background:var(--surface-2,rgba(127,127,127,.06));border-left:3px solid var(--blue)}
-.rv-def{border-left-color:var(--good,#1d7a46)}.rv-dmg{border-left-color:var(--bad)}
+.rv-ok{border-left-color:var(--good,#1d7a46)}.rv-def{border-left-color:var(--warn,#b7791f)}.rv-dmg{border-left-color:var(--bad)}
 .rv-h{display:flex;justify-content:space-between;align-items:baseline}.rv-note{display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap;font-size:14px}
 .rv-txt{flex:1;min-width:140px}.rv-t{border:1px solid var(--line);background:var(--card,transparent);color:inherit;border-radius:6px;padding:1px 6px;font-size:12px;cursor:pointer}
 .rv-acts{display:flex;gap:2px}.rv-add{display:flex;gap:6px;flex-wrap:wrap}.rv-add input{flex:1;min-width:160px}
+.fi-list{display:grid;gap:2px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px}.fi-row{display:grid;grid-template-columns:3em 1fr auto auto;gap:8px;font-size:13.5px;align-items:baseline}
 </style>
 </head>
 <body>
@@ -2508,8 +2509,68 @@ INP['set-f']=el=>{SET[el.dataset.k]=el.value};
 ACT['set-save']=()=>{if(SET.slots.some(x=>tmin(x.end)<=tmin(x.start))){toast('Revisa las horas: alguna termina antes de empezar');return}SET.slots.forEach(x=>{x.type=(x.type||'').trim()||'Pista'});SET.slots.sort((a,b)=>a.dow-b.dow||a.start.localeCompare(b.start));delete SET._empty;delete SET._reset;S.settings=SET;save();closeSheet();render();toast('Ajustes guardados')};
 ACT['set-reset']=()=>{if(!SET._reset){SET._reset=true;renderSheet();return}S=seed();save();pzReset();closeSheet();render();toast('Datos de ejemplo restablecidos')};
 
+/* lee el texto de un PDF de «estadística del partido» de la FBM (app Afición FBM) */
+function fbmLinesFromItems(items){const rows=[];for(const it of items){if(!it.str||!it.str.trim())continue;const y=Math.round(it.transform[5]);let r=rows.find(r=>Math.abs(r.y-y)<=2);if(!r){r={y,its:[]};rows.push(r)}r.its.push(it)}
+  rows.sort((a,b)=>b.y-a.y);return rows.map(r=>r.its.sort((a,b)=>a.transform[4]-b.transform[4]).map(i=>i.str).join(' ').replace(/[­‐-―−]/g,'-').replace(/\s+/g,' ').trim())}
+function fbmParse(lines){const out={title:'',teams:[]};let cur=null;
+  for(let i=0;i<lines.length;i++){const L=lines[i];
+    if(!out.title&&/^Estad[ií]sticas\b/i.test(L))out.title=L.replace(/^Estad[ií]sticas\s*-\s*/i,'');
+    if(/^Entrenador\s*:/i.test(L)){cur={name:(lines[i-1]||'').trim(),coach:L.replace(/^Entrenador\s*:\s*/i,'').trim(),players:[],tot:null};out.teams.push(cur);continue}
+    if(!cur)continue;
+    const tm=/^TOTALES\s+(\d+:\d\d)\s+(-?\d+)\s+(\d+)\/(\d+)\s+-?\d+\s+(\d+)\/(\d+)\s+-?\d+\s+(\d+)\/(\d+)\s+-?\d+\s+((?:-?\d+\s+){11}-?\d+)/.exec(L);
+    if(tm){const n=tm[9].trim().split(/\s+/).map(Number);cur.tot={pts:+tm[2],t2a:+tm[3],t2i:+tm[4],t3a:+tm[5],t3i:+tm[6],tla:+tm[7],tli:+tm[8],rd:n[0],ro:n[1],as:n[3],rob:n[4],per:n[5],tap:n[6],fc:n[8],fr:n[9]};continue}
+    const m=/^(\d{1,3}|X)\s+(\*?)\s*(.+?)\s+(\d{1,3}):(\d\d)\s+(-?\d+)\s+(\d+)\/(\d+)\s+-?\d+\s+(\d+)\/(\d+)\s+-?\d+\s+(\d+)\/(\d+)\s+-?\d+\s+((?:-?\d+\s+){11}-?\d+)\s*$/.exec(L);
+    if(m){const n=m[13].trim().split(/\s+/).map(Number);const sec=(+m[4])*60+(+m[5]);
+      cur.players.push({dorsal:m[1],starter:!!m[2],cap:/\(CAP\)/i.test(m[3]),name:m[3].replace(/\(CAP\)/i,'').trim(),sec,min:Math.round(sec/60),pts:+m[6],t2a:+m[7],t2i:+m[8],t3a:+m[9],t3i:+m[10],tla:+m[11],tli:+m[12],rd:n[0],ro:n[1],as:n[3],rob:n[4],per:n[5],tap:n[6],fc:n[8],fr:n[9],val:n[10],pm:n[11]})}}
+  return out}
+/* ---------- Importar la estadística del partido de la FBM (PDF de la app Afición FBM) ---------- */
+const FI={};
+function pdfjsLoad(){return new Promise(res=>{if(window.pdfjsLib)return res(window.pdfjsLib);const loc=location.protocol.startsWith('http')&&!window.claude;const base=loc?'vendor/':'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+  const s=document.createElement('script');s.src=base+'pdf.min.js';s.onload=()=>{try{pdfjsLib.GlobalWorkerOptions.workerSrc=base+'pdf.worker.min.js'}catch(e){}res(window.pdfjsLib||null)};s.onerror=()=>res(null);document.head.appendChild(s)})}
+async function fbmReadPdf(file){const lib=await pdfjsLoad();if(!lib)throw new Error('nolib');const buf=new Uint8Array(await file.arrayBuffer());let doc;
+  try{doc=await lib.getDocument({data:buf}).promise}catch(e){doc=await lib.getDocument({data:buf,disableWorker:true}).promise}
+  let lines=[];for(let p=1;p<=doc.numPages;p++){const pg=await doc.getPage(p);const tc=await pg.getTextContent();lines=lines.concat(fbmLinesFromItems(tc.items))}return fbmParse(lines)}
+const fiNorm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+const fiWords=s=>fiNorm(s).split(' ').filter(w=>w.length>2&&!['CLUB','BALONCESTO','BASKET','C B','CB','DEL','LOS','LAS'].includes(w));
+const fiSim=(a,b)=>{const A=fiWords(a),B=new Set(fiWords(b));return A.filter(w=>B.has(w)).length};
+const fiTitle=s=>String(s||'').toLowerCase().replace(/(^|[\s,\-'(])(\p{L})/gu,(m,a,b)=>a+b.toUpperCase());
+const fiPretty=n=>{const t=fiTitle(n);const p=t.split(',');return p.length===2?(p[1].trim()+' '+p[0].trim()):t};
+function fiOurIdx(R){const ros=S.roster||[];const dors=new Set(ros.map(p=>String(p.dorsal)));
+  const sc=R.teams.map(t=>t.players.filter(p=>dors.has(String(p.dorsal))).length*2+fiSim(t.name,S.settings.team+' '+(S.settings.category||''))*3);return sc[1]>sc[0]?1:0}
+function fiGuessMatch(rival){const ms=S.matches.slice().sort((a,b)=>b.date.localeCompare(a.date));let best=null,bs=0;
+  for(const m of ms){const s=fiSim(m.rival,rival)*10+(m.date<=TODAY?3:0)+(hasBox(m)?0:2);if(fiSim(m.rival,rival)>0&&s>bs){bs=s;best=m}}
+  return best||ms.find(m=>m.date<=TODAY&&!hasBox(m))||null}
+ACT['fbm-imp']=el=>{FI.mid=el&&el.dataset&&el.dataset.m||null;let i=$('#fbm-file');if(!i){i=document.createElement('input');i.type='file';i.id='fbm-file';i.accept='application/pdf,.pdf';i.hidden=true;i.dataset.chg='fbm-file';document.body.appendChild(i)}i.value='';i.click()};
+CHG['fbm-file']=async el=>{const f=el.files&&el.files[0];if(!f)return;toast('Leyendo el PDF…');let R;
+  try{R=await fbmReadPdf(f)}catch(e){toast(e&&e.message==='nolib'?'No se ha podido cargar el lector de PDF. Comprueba la conexión':'No se ha podido leer ese PDF');return}
+  if(R.teams.length!==2||!R.teams.every(t=>t.players.length&&t.tot)){toast('Ese PDF no parece una estadística de partido de la FBM');return}
+  FI.R=R;FI.our=fiOurIdx(R);const riv=R.teams[1-FI.our];const g=FI.mid?matchById(FI.mid):fiGuessMatch(riv.name);FI.match=g?g.id:'new';FI.date=TODAY;FI.home=FI.our===0;FI.addNew=true;openSheet(fiSheet)};
+function fiMap(){const R=FI.R,our=R.teams[FI.our];const ros=S.roster||[];return our.players.map(p=>{const r=ros.find(x=>String(x.dorsal)===String(p.dorsal)&&p.dorsal!=='X');return {p,r}})}
+function fiSheet(){const R=FI.R,our=R.teams[FI.our],riv=R.teams[1-FI.our];const map=fiMap();const miss=map.filter(x=>!x.r);const ms=S.matches.slice().sort((a,b)=>b.date.localeCompare(a.date));const sel=FI.match!=='new'&&matchById(FI.match);
+  return `${sheetHead('Estadística FBM','Importar partido')}
+  <div class="rulebox"><b>${esc(R.title||'Estadística del partido')}</b><div class="row between num"><span>${esc(R.teams[0].name)} <b>${R.teams[0].tot.pts}</b></span><span><b>${R.teams[1].tot.pts}</b> ${esc(R.teams[1].name)}</span></div></div>
+  <label class="f">¿Cuál es tu equipo?<select data-chg="fi-our">${R.teams.map((t,i)=>`<option value="${i}" ${i===FI.our?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label>
+  <label class="f">¿Qué partido es?<select data-chg="fi-match"><option value="new" ${FI.match==='new'?'selected':''}>Partido nuevo</option>${ms.map(m=>`<option value="${m.id}" ${FI.match===m.id?'selected':''}>${fmtDay(m.date)} · ${m.home?'vs':'en casa de'} ${esc(m.rival)}${hasBox(m)?' (ya tiene estadística: se sustituye)':''}</option>`).join('')}</select></label>
+  ${FI.match==='new'?`<div class="grid2"><label class="f">Fecha<input type="date" value="${FI.date}" data-inp="fi-date"></label><label class="f">Dónde<select data-chg="fi-home"><option value="1" ${FI.home?'selected':''}>En casa</option><option value="0" ${!FI.home?'selected':''}>Fuera</option></select></label></div>`:''}
+  <div><div class="f-l">Tus jugadores (${our.players.length})</div><div class="fi-list">${map.map(({p,r})=>`<div class="fi-row"><span class="num">#${esc(p.dorsal)}</span><span>${esc(fiPretty(p.name))}</span><span class="small ${r?'':'muted'}">${r?'→ '+esc(r.name):'nuevo'}</span><span class="num small">${p.pts} pts · ${Math.floor(p.sec/60)}′</span></div>`).join('')}</div>
+  ${miss.length?`<label class="toggle small"><input type="checkbox" data-chg="fi-add" ${FI.addNew?'checked':''}><span>Añadir a la plantilla los ${miss.length} que no están (se emparejan por dorsal)</span></label>`:''}</div>
+  <div class="small muted">Rival: ${riv.players.length} jugadores con su estadística individual. ${sel&&hasBox(sel)?'<b>Este partido ya tiene estadística: se sustituirá.</b>':''}</div>
+  <div class="sheet-foot"><button class="btn" data-act="close-sheet">Cancelar</button><button class="btn btn-p" data-act="fi-go">Importar</button></div>`}
+CHG['fi-our']=el=>{FI.our=+el.value;renderSheet()};CHG['fi-match']=el=>{FI.match=el.value;renderSheet()};CHG['fi-home']=el=>{FI.home=el.value==='1'};CHG['fi-add']=el=>{FI.addNew=el.checked;renderSheet()};INP['fi-date']=el=>{FI.date=el.value};
+const fiBox=p=>({min:Math.round(p.sec/60),sec:p.sec,t2a:p.t2a,t2i:p.t2i,t3a:p.t3a,t3i:p.t3i,tla:p.tla,tli:p.tli,ro:p.ro,rd:p.rd,as:p.as,rob:p.rob,tap:p.tap,per:p.per,fc:p.fc,fr:p.fr,pm:p.pm});
+ACT['fi-go']=()=>{const R=FI.R,our=R.teams[FI.our],riv=R.teams[1-FI.our];let m=FI.match!=='new'&&matchById(FI.match);
+  if(!m){if(!FI.date){toast('Pon la fecha del partido');return}m={id:uid(),date:FI.date,time:'',rival:fiTitle(riv.name),home:FI.home,note:'',remind:false,resolved:false};S.matches.push(m)}
+  const box={},pts={};for(const {p,r} of fiMap()){let pl=r;if(!pl){if(!FI.addNew)continue;pl={id:uid(),dorsal:p.dorsal==='X'?'':p.dorsal,name:fiPretty(p.name),pos:''};S.roster.push(pl)}box[pl.id]=fiBox(p);pts[pl.id]=p.pts}
+  const rplayers=[],rpbox={};for(const p of riv.players){const id=uid();rplayers.push({id,dorsal:p.dorsal,name:p.name==='NOMBRE'?'(sin nombre en el acta)':fiTitle(p.name)});rpbox[id]=fiBox(p)}
+  const all=[...our.players,...riv.players];const full=all.some(p=>p.ro||p.rd||p.as||p.rob||p.per);const T=riv.tot;
+  Object.assign(m,{box,pts,us:our.tot.pts,them:riv.tot.pts,rplayers,rpbox,rivalByPlayer:true,rbox:{t2a:T.t2a,t2i:T.t2i,t3a:T.t3a,t3i:T.t3i,tla:T.tla,tli:T.tli,ro:T.ro,rd:T.rd,as:T.as,rob:T.rob,tap:T.tap,per:T.per,fc:T.fc},fbm:!full,
+    stats:{perd:full?our.tot.per:null,rebO:full?our.tot.ro:null,rebRO:full?T.ro:null,t3:our.tot.t3a,tlA:our.tot.tla,tlI:our.tot.tli,faltas:our.tot.fc}});
+  if(m.date<=TODAY&&!m.note)m.note='';save();closeSheet();if(SH)closeSheet();render();toast(`Estadística importada: ${m.us}–${m.them} ${m.home?'vs':'en casa de'} ${m.rival}`)};
+/* botones */
+{const _ve=VIEWS.estadisticas;VIEWS.estadisticas=()=>{const h=_ve();if(ST.edit)return h;return h.replace('<h1>Estadísticas</h1></div></div>','<h1>Estadísticas</h1></div><button class="btn btn-s btn-b" data-act="fbm-imp">📄 Importar PDF de la FBM</button></div>')}}
+{const _ms=matchSheet;matchSheet=function(){const h=_ms();const m=MD;if(!m||!m.id||m.date>TODAY)return h;const i=h.indexOf('data-act="st-edit"');if(i<0)return h;const j=h.indexOf('</button>',i)+9;return h.slice(0,j)+` <button class="btn btn-s" data-act="fbm-imp" data-m="${m.id}">📄 Importar PDF de la FBM</button>`+h.slice(j)}}
 /* ---------- VÍDEO: informe del partido (qué mejorar en ataque, en defensa y dónde nos hicieron daño) ---------- */
-const RV_CATS=[['atk','Ataque · a mejorar','Ej.: no corremos el contraataque, pocos pases antes de tirar'],['def','Defensa · a mejorar','Ej.: no cerramos el rebote, llegamos tarde a las ayudas'],['dmg','Dónde nos hicieron daño','Ej.: su 4 abierto en el triple, bloqueo directo central']];
+const RV_CATS=[['ok','Lo que hicimos bien','Ej.: buena circulación contra la zona, mucha intensidad en defensa'],['atk','Ataque · a mejorar','Ej.: no corremos el contraataque, pocos pases antes de tirar'],['def','Defensa · a mejorar','Ej.: no cerramos el rebote, llegamos tarde a las ayudas'],['dmg','Dónde nos hicieron daño','Ej.: su 4 abierto en el triple, bloqueo directo central']];
 const RV={draft:{},time:{}};
 const rvOf=v=>{v.review=v.review||{};RV_CATS.forEach(([k])=>{if(!Array.isArray(v.review[k]))v.review[k]=[]});return v.review};
 const rvCount=v=>v.review?RV_CATS.reduce((a,[k])=>a+((v.review[k]||[]).length),0):0;
@@ -2518,7 +2579,7 @@ function rvHTML(v){const r=rvOf(v);const m=v.matchId&&matchById(v.matchId);const
   ${m?`<span class="small muted">${fmtDay(m.date)} · ${m.home?'vs':'en casa de'} ${esc(m.rival)}</span>`:`<span class="small muted">Une este vídeo a un partido en «Datos del análisis» para verlo también desde el partido.</span>`}
   ${RV_CATS.map(([k,l,ph])=>`<div class="rv-cat rv-${k}"><div class="rv-h"><b>${l}</b><span class="num muted small">${r[k].length}</span></div>
     ${r[k].map(n=>`<div class="rv-note">${n.t!=null?`<button class="rv-t num" data-act="v-goto" data-t="${n.t}" title="Ir a ese momento">${fmtT(n.t)}</button>`:''}<span class="rv-txt">${esc(n.txt)}</span>
-      <span class="rv-acts"><button class="btn btn-ghost btn-s" data-act="rv-obj" data-k="${k}" data-id="${n.id}" title="Crear un objetivo de este mes con esta nota">${n.obj?'✓ Objetivo':'→ Objetivo'}</button><button class="btn btn-ghost btn-s" data-act="rv-del" data-k="${k}" data-id="${n.id}" aria-label="Borrar nota">✕</button></span></div>`).join('')}
+      <span class="rv-acts">${k==='ok'?'':`<button class="btn btn-ghost btn-s" data-act="rv-obj" data-k="${k}" data-id="${n.id}" title="Crear un objetivo de este mes con esta nota">${n.obj?'✓ Objetivo':'→ Objetivo'}</button>`}<button class="btn btn-ghost btn-s" data-act="rv-del" data-k="${k}" data-id="${n.id}" aria-label="Borrar nota">✕</button></span></div>`).join('')}
     <div class="rv-add"><input type="text" id="rv-in-${k}" data-inp="rv-in" data-k="${k}" value="${esc(RV.draft[k]||'')}" placeholder="${esc(ph)}" aria-label="Nueva nota: ${esc(l)}">
       <button class="btn btn-s btn-p" data-act="rv-add" data-k="${k}">Añadir</button>${VA.P?`<button class="btn btn-s" data-act="rv-add" data-k="${k}" data-at="1" title="Añadir la nota con el momento actual del vídeo">⏱ Aquí</button>`:''}</div></div>`).join('')}
   <span class="small muted">«⏱ Aquí» guarda la nota con el segundo del vídeo: luego tocas la hora y vas directo a esa jugada.</span></section>`}
@@ -2539,7 +2600,7 @@ function rvLastMatch(){return S.matches.filter(m=>m.date<=TODAY&&m.us!=null).sor
   const card=m?(()=>{const v=S.videos.find(x=>x.matchId===m.id);return `<section class="card rv-last"><div class="eyebrow">Partido anterior</div>
     <div class="row between"><div style="min-width:0"><b>${m.home?'vs':'en casa de'} ${esc(m.rival)}</b> <span class="num">${m.us}–${m.them}</span><br><span class="small muted">${fmtDay(m.date)}${v?` · ${vCounts(v)}`:''}</span></div>
     ${v?`<button class="btn btn-p" data-act="v-open" data-id="${v.id}">Abrir análisis</button>`:''}</div>
-    ${v?'':`<span class="small muted">Sube el vídeo y apunta qué mejorar en ataque, en defensa y dónde os hicieron daño.</span><div class="row" style="gap:8px"><button class="btn btn-p" data-act="v-new-file" data-m="${m.id}">📁 Subir vídeo del partido</button><button class="btn" data-act="v-new-yt" data-m="${m.id}">▶ Enlace de YouTube</button></div>`}</section>`})():'';
+    ${v?'':`<span class="small muted">Sube el vídeo y apunta lo que hicisteis bien, qué mejorar en ataque y en defensa, y dónde os hicieron daño.</span><div class="row" style="gap:8px"><button class="btn btn-p" data-act="v-new-file" data-m="${m.id}">📁 Subir vídeo del partido</button><button class="btn" data-act="v-new-yt" data-m="${m.id}">▶ Enlace de YouTube</button></div>`}</section>`})():'';
   return h.replace('<section class="card"><div class="row" style="gap:8px"><button class="btn btn-p" data-act="v-new-file">',card+'<section class="card"><div class="row" style="gap:8px"><button class="btn btn-p" data-act="v-new-file">')}}
 {const _vc=vCounts;vCounts=v=>{const n=rvCount(v);return _vc(v)+(n?` · ${n} ${n===1?'nota':'notas'}`:'')}}
 const BL_CFG={"url": "https://evwjgeoqttibwfjwuods.supabase.co", "key": "sb_publishable_ny4jgMIz_iRPiLHZ0WEnvQ_Yle4hSG1"};
