@@ -2957,6 +2957,28 @@ ACT['sy-acct']=()=>{if(!SB.cli){if(SY.db)toast(SY.st==='off'?'Sin conexión: los
     .replace(/<span class="small muted">Solo tú<\/span>/g,'<span class="small muted">Preparando su código…</span>')
     .replace('Compartir con otros entrenadores','Códigos de tus equipos').replace('Los ejercicios y jugadas de la pizarra sí se comparten en todos tus equipos.','Para compartir un equipo, pasa su código a sus entrenadores. Los ejercicios y jugadas de la pizarra se comparten en todos tus equipos.')
     .replace('<button class="btn btn-ghost" data-act="sb-out">Salir de la cuenta</button>',sbOutBtn())}}
+/* Pizarra: reconocer automáticamente la foto (IA de Google a través de Supabase) */
+async function phImageB64(url){const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url});const M=1280;const k=Math.min(1,M/Math.max(img.width,img.height));
+  const c=document.createElement('canvas');c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);const g=c.getContext('2d');
+  if(PH.rot){const r=PH.rot%180!==0;if(r){c.width=Math.round(img.height*k);c.height=Math.round(img.width*k)}g.translate(c.width/2,c.height/2);g.rotate(PH.rot*Math.PI/180);g.drawImage(img,-img.width*k/2,-img.height*k/2,img.width*k,img.height*k)}else g.drawImage(img,0,0,c.width,c.height);
+  return c.toDataURL('image/jpeg',.85).split(',')[1]}
+function phToBoard(R){const full=R.court==='full';const W=500,H=full?940:470;const cl=v=>Math.max(0,Math.min(1,+v||0));const tokens=[];let na=0,nd=0;
+  (R.players||[]).forEach(p=>{const a=p.side!=='d';const id=(a?'a':'d')+(a?++na:++nd);tokens.push(T(id,a?'a':'d',p.n||(a?na:nd),Math.round(cl(p.x)*W),Math.round(cl(p.y)*H)))});
+  if(R.ball&&R.ball.x!=null){const bx=Math.round(cl(R.ball.x)*W),by=Math.round(cl(R.ball.y)*H);tokens.push(T('b1','b','',bx,by))}
+  (R.cones||[]).forEach((c,i)=>tokens.push(T('c'+(i+1),'c','',Math.round(cl(c.x)*W),Math.round(cl(c.y)*H))));
+  const near=(x,y,max)=>{let b=null,bd=max;for(const t of tokens){if(t.k==='c'||t.k==='b')continue;const d=Math.hypot(t.x-x,t.y-y);if(d<bd){bd=d;b=t}}return b};
+  const specs=[];let skipped=0;(R.arrows||[]).forEach(a=>{const fx=cl(a.from&&a.from.x)*W,fy=cl(a.from&&a.from.y)*H,tx=Math.round(cl(a.to&&a.to.x)*W),ty=Math.round(cl(a.to&&a.to.y)*H);const s=near(fx,fy,full?90:70);if(!s){skipped++;return}
+    const kind=['corte','pase','bote','bloqueo'].includes(a.type)?a.type:'corte';const tgt=kind==='pase'?near(tx,ty,full?80:60):null;specs.push(tgt&&tgt!==s?[kind,s.id,0,0,tgt.id]:[kind,s.id,tx,ty])});
+  const b=BD(tokens,specs);if(full)b.court='full';return {b,skipped,n:tokens.length,na:specs.length}}
+ACT['ph-ai']=async()=>{if(!PH.url)return;if(!SB.cli||!SB.user){toast('Para reconocerla automáticamente, entra con tu cuenta (pulsa la nube de arriba)');return}if(PH.busy)return;
+  PH.busy=true;render();try{const image=await phImageB64(PH.url);const {data,error}=await SB.cli.functions.invoke('pizarra-ia',{body:{image,mime:'image/jpeg'}});
+    if(error){let m='';try{const j=await error.context.json();m=j.error||''}catch(e){}throw new Error(m||error.message||'error')}
+    if(!data||data.error)throw new Error((data&&data.error)||'Sin respuesta');
+    const {b,skipped,n,na}=phToBoard(data);if(!n){toast('No he encontrado jugadores en la foto. Prueba con una foto de frente y con buena luz');return}
+    pushHist();PZ.board=b;PZ.fi=0;PH.op=.3;render();toast(`Listo: ${n} ${n===1?'elemento':'elementos'} y ${na} ${na===1?'flecha':'flechas'}${skipped?` (${skipped} sin colocar)`:''}. Revísalo y retoca lo que haga falta`)}
+  catch(e){const m=String(e.message||e);toast(/429|quota|rate/i.test(m)?'Se ha llegado al límite gratis de hoy. Prueba más tarde o cálcala a mano':/GEMINI_API_KEY/.test(m)?'Falta configurar la clave de Google en Supabase':/Failed to send|fetch|network/i.test(m)?'No hay conexión o la función no está creada todavía':'No se ha podido reconocer: '+m.slice(0,90))}
+  finally{PH.busy=false;render()}};
+{const _pv2=VIEWS.pizarra;VIEWS.pizarra=()=>{const h=_pv2();if(!PH.url)return h;return h.replace('<b class="small">📷 Calcando la foto</b>',`<b class="small">📷 Calcando la foto</b><button class="btn btn-s btn-p" data-act="ph-ai" ${PH.busy?'disabled':''}>${PH.busy?'Reconociendo…':'✨ Reconocer automáticamente'}</button>`)}}
 
 /* ---------- APP: copia de seguridad, almacenamiento persistente y modo sin conexión ---------- */
 ACT['bk-export']=()=>{try{const blob=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='basket-lover-copia-'+TODAY+'.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);toast('Copia descargada')}catch(e){toast('No se ha podido descargar la copia')}};
