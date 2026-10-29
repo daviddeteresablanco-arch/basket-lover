@@ -2239,10 +2239,14 @@ function partsEditorHTML(v){const ps=vParts(v);const locked=v.clips.length||v.ma
   <div class="row" style="gap:6px"><button class="btn btn-s" data-act="v-add-parts">+ Añadir vídeos al final</button><button class="btn btn-ghost btn-s" data-act="v-reopen">Volver a elegir los archivos</button></div></div>`}
 ACT['v-reopen']=async()=>{const v=vById(VA.open);const ps=vParts(v);let files=null;const hs=await IDB.get(v.id);const arr=Array.isArray(hs)?hs:hs?[hs]:[];
   if(arr.length===ps.length&&arr.every(h=>h&&h.getFile)){try{const out=[];for(const h of arr){let p=h.queryPermission?await h.queryPermission({mode:'read'}):'granted';if(p!=='granted'&&ps.length===1&&h.requestPermission)p=await h.requestPermission({mode:'read'});if(p!=='granted')throw 0;out.push(await h.getFile())}files=out}catch(e){files=null}}
-  if(!files){if(ps.length>1)toast(`Elige los ${ps.length} vídeos a la vez (puedes seleccionarlos todos con Ctrl+A)`);const r=await pickVideoFiles();if(!r)return;
+  if(!files){if(ps.length>1)toast(`Elige los ${ps.length} vídeos a la vez ${matchMedia('(pointer:coarse)').matches?'(mantén pulsado uno y marca los demás)':'(puedes seleccionarlos todos con Ctrl+A)'}`);const r=await pickVideoFiles();if(!r)return;
     if(ps.length===1&&r.files.length===1){files=[r.files[0]];if(r.files[0].name!==ps[0].name)toast(`Ojo: has elegido «${r.files[0].name}», distinto del original`);ps[0].name=r.files[0].name;ps[0].size=r.files[0].size;if(r.handles[0])IDB.put(v.id,[r.handles[0]])}
     else{const idx=new Map(r.files.map((f,i)=>[f.name.toLowerCase(),i]));const miss=ps.filter(p=>!idx.has(p.name.toLowerCase()));
-      if(miss.length){toast(`Faltan ${miss.length} de ${ps.length} vídeos: ${miss.slice(0,2).map(p=>p.name).join(', ')}${miss.length>2?'…':''}`);return}
+      if(miss.length){/* el móvil cambia los nombres al elegir de la galería: probar por tamaño y si no, por orden */
+        const bySize=new Map();r.files.forEach((f,i)=>{if(!bySize.has(f.size))bySize.set(f.size,i)});
+        if(ps.every(p=>idx.has(p.name.toLowerCase())||bySize.has(p.size)))ps.forEach(p=>{if(!idx.has(p.name.toLowerCase()))idx.set(p.name.toLowerCase(),bySize.get(p.size))});
+        else if(r.files.length===ps.length){const ord=r.files.map((f,i)=>i).sort((a,b)=>r.files[a].name.localeCompare(r.files[b].name,undefined,{numeric:true}));ps.forEach((p,k)=>idx.set(p.name.toLowerCase(),ord[k]));toast('Los nombres no coinciden: se usan en el orden elegido. Si no cuadra, vuelve a abrirlos.')}
+        else{toast(`Elige los ${ps.length} vídeos del partido a la vez (has elegido ${r.files.length})`);return}}
       files=ps.map(p=>r.files[idx.get(p.name.toLowerCase())]);if(r.handles.length===r.files.length)IDB.put(v.id,ps.map(p=>r.handles[idx.get(p.name.toLowerCase())]))}save()}
   (VA.urls[v.id]||[]).forEach(u=>URL.revokeObjectURL(u));VA.urls[v.id]=files.map(f=>URL.createObjectURL(f));vTeardown();render()};
 function mountFile(v,el){const ps=vParts(v),urls=VA.urls[v.id];let cur=0,switching=false,want=false;
