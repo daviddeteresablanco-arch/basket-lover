@@ -579,6 +579,7 @@ body.v-big .vtip{background:#e8eef3;color:#05080b}
 .pf-bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.pf-new{display:inline-flex;gap:4px;align-items:center}.pf-new input{width:200px;max-width:60vw}.pf-add{border-style:dashed}.pf-mv{padding:0 10px 10px}.pf-mv select{width:100%;font-size:12.5px;padding:4px 6px}
 .bk-b{all:unset;cursor:pointer;min-width:26px;height:26px;text-align:center;border-radius:6px;color:var(--muted);font-size:14px}.bk-b:hover{background:var(--line)}.bk-add{display:flex;flex-direction:column;gap:6px;padding:4px 0}
 .item-water{background:color-mix(in srgb,var(--blue) 7%,transparent)}
+.it-objs{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:3px}.it-objs select{font-size:12.5px;padding:3px 6px;max-width:100%}.it-o{display:inline-flex;align-items:center;gap:2px}.it-o button{all:unset;cursor:pointer;padding:0 3px;font-weight:700;opacity:.7}
 </style>
 </head>
 <body>
@@ -740,7 +741,7 @@ function seedBase(){
   while(d<TODAY){if([1,3].includes(dow(d))){const spec=d>matches[1].date?(k%2?B:A):B;sessions.push({id:uid(),date:d,time:'18:00',duration:90,blocks:BL(spec)});k++}d=addDays(d,1)}
   return{v:1,settings:{team:'Infantil A',category:'Infantil masculino',days:[1,3],time:'18:00',duration:90},
     exercises,objectives,matches,sessions,
-    templates:[{id:'t1',name:'Tipo martes: técnica y defensa',blocks:BL(A).map(b=>({...b,items:b.items.map(i=>({...i,objId:null}))}))}],
+    templates:[{id:'t1',name:'Tipo martes: técnica y defensa',blocks:BL(A).map(b=>({...b,items:b.items.map(i=>({...i,objId:null,objIds:[]}))}))}],
     plays:[{id:'p1',name:'Pick & roll central',kind:'Sistema',roles:null,notes:{danger:'Si el 5 continúa rápido hacia el aro y su defensor llega tarde, canasta fácil. Si ayudamos de más, el 2 queda solo en la esquina.',defend:'Flash del defensor del 5 y recuperar. El defensor del 4 ayuda al 5 que continúa. Si el 1 no tira, pasar por detrás del bloqueo.',keys:'El 1 fija a su defensor con dos botes antes de usar el bloqueo. El 5 bloquea parado y continúa de cara al balón.'},board:Object.assign(pickRollPlay(),{roles:{a1:{name:'Base',fuertes:['Penetrador','Pasador'],debiles:['Mano débil']},a2:{name:'',fuertes:['Tirador'],debiles:[]},a5:{name:'',fuertes:['Poste','Reboteador'],debiles:['Mal tirador libre']}}})},{id:'p2',name:'Caja: bloqueo para el 2',kind:'Saque de fondo',notes:{danger:'El 4 queda solo bajo el aro si cambiamos tarde en el bloqueo.',defend:'Cambiar en el bloqueo del 4 y negar el pase al 2 con el defensor por delante.',keys:'El 2 espera al bloqueo y sale rozando el hombro del 4.'},board:Object.assign(boxPlay(),{roles:{a2:{name:'',fuertes:['Tirador','Rápido'],debiles:[]},a4:{name:'',fuertes:['Físico'],debiles:[]}}})},
       {id:'p3',name:'Zona 2-3',kind:'Defensa',notes:{danger:'Tiro desde las esquinas y balón al poste alto, en el centro de la zona.',defend:'Nos la atacan con balón al tiro libre y pase rápido a la esquina contraria.',keys:'Los de abajo hablan y salen a la esquina en el pase; el 5 niega el poste alto.'},board:BD([T('d1','d',1,180,250),T('d2','d',2,320,250),T('d3','d',3,95,120),T('d4','d',4,405,120),T('d5','d',5,250,95)],[])}]};
 }
@@ -759,9 +760,12 @@ const exById=id=>S.exercises.find(e=>e.id===id);
 const objById=id=>S.objectives.find(o=>o.id===id);
 const matchById=id=>S.matches.find(m=>m.id===id);
 const sessTotal=s=>s.blocks.reduce((a,b)=>a+b.items.reduce((x,i)=>x+(+i.min||0),0),0);
-const sessObjs=s=>[...new Set(s.blocks.flatMap(b=>b.items.map(i=>i.objId)).filter(Boolean))];
+/* un ejercicio de la sesión puede trabajar varios objetivos: objIds (objId queda como el primero, por compatibilidad) */
+const itO=i=>Array.isArray(i.objIds)?i.objIds:(i.objId?[i.objId]:[]);
+const setO=(i,a)=>{a=[...new Set(a.filter(Boolean))];i.objIds=a;i.objId=a[0]||null};
+const sessObjs=s=>[...new Set(s.blocks.flatMap(b=>b.items.flatMap(itO)).filter(Boolean))];
 function usage(exId){let n=0,last=null;for(const s of S.sessions)for(const b of s.blocks)for(const i of b.items)if(i.exId===exId){n++;if(!last||s.date>last)last=s.date}return{n,last}}
-function objStats(id){let min=0,plan=0;const rows=[];for(const s of S.sessions){let m=0;const names=[];for(const b of s.blocks)for(const i of b.items)if(i.objId===id){m+=+i.min||0;const e=exById(i.exId);if(e&&!names.includes(e.name))names.push(e.name)}
+function objStats(id){let min=0,plan=0;const rows=[];for(const s of S.sessions){let m=0;const names=[];for(const b of s.blocks)for(const i of b.items)if(itO(i).includes(id)){m+=+i.min||0;const e=exById(i.exId);if(e&&!names.includes(e.name))names.push(e.name)}
   if(m){const past=s.date<TODAY;if(past)min+=m;else plan+=m;rows.push({s,m,past,names})}}rows.sort((a,b)=>b.s.date.localeCompare(a.s.date));return{min,plan,n:rows.filter(r=>r.past).length,rows}}
 const lastSessions=(n=3,before)=>S.sessions.filter(s=>!before||s.date<before).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,n);
 const activeReminders=upto=>S.matches.filter(m=>m.note&&m.remind&&!m.resolved&&(!upto||m.date<upto)).sort((a,b)=>b.date.localeCompare(a.date));
@@ -1063,15 +1067,15 @@ function sessionSheet(){const s=SD;const total=sessTotal(s);const diff=s.duratio
     h+=`<div class="block"><div class="block-h"><b>${esc(b.name)}</b><span class="row" style="gap:2px"><span class="small muted num" style="margin-right:6px">${sub} min</span>${bi>0?`<button class="bk-b" data-act="bk-mv" data-b="${bi}" data-d="-1" aria-label="Subir bloque">↑</button>`:''}${bi<s.blocks.length-1?`<button class="bk-b" data-act="bk-mv" data-b="${bi}" data-d="1" aria-label="Bajar bloque">↓</button>`:''}<button class="bk-b" data-act="bk-rm" data-b="${bi}" aria-label="Quitar bloque">${BK.del===bi?'¿Quitar?':'×'}</button></span></div><div class="items">`;
     b.items.forEach((it,ii)=>{if(it.water){h+=`<div class="item item-water"><div class="item-main"><b>💧 Agua</b><span class="small muted">Pausa para beber</span></div>
       <div class="stepper"><button data-act="it-min" data-b="${bi}" data-i="${ii}" data-d="-1" aria-label="Menos minutos">−</button><span>${it.min}′</span><button data-act="it-min" data-b="${bi}" data-i="${ii}" data-d="1" aria-label="Más minutos">+</button></div>
-      <button class="x" data-act="it-rm" data-b="${bi}" data-i="${ii}" aria-label="Quitar">×</button></div>`;return}const e=exById(it.exId);const opts=[...mObjs];const lo=it.objId&&objById(it.objId);if(lo&&!opts.includes(lo))opts.push(lo);
-      h+=`<div class="item"><div class="item-main"><b>${e?esc(e.name):'Ejercicio borrado'}</b><select data-chg="it-obj" data-b="${bi}" data-i="${ii}" aria-label="Objetivo">
-      <option value="">Sin objetivo</option>${opts.map(o=>`<option value="${o.id}" ${o.id===it.objId?'selected':''}>🎯 ${esc(o.title)}</option>`).join('')}</select></div>
+      <button class="x" data-act="it-rm" data-b="${bi}" data-i="${ii}" aria-label="Quitar">×</button></div>`;return}const e=exById(it.exId);const cur=itO(it).map(objById).filter(Boolean);const opts=mObjs.filter(o=>!cur.includes(o));
+      h+=`<div class="item"><div class="item-main"><b>${e?esc(e.name):'Ejercicio borrado'}</b><div class="it-objs">${cur.map(o=>`<span class="tag it-o">🎯 ${esc(o.title)}<button data-act="it-obj-rm" data-b="${bi}" data-i="${ii}" data-o="${o.id}" aria-label="Quitar objetivo ${esc(o.title)}">×</button></span>`).join('')}
+      ${opts.length?`<select data-chg="it-obj" data-b="${bi}" data-i="${ii}" aria-label="Añadir objetivo"><option value="">${cur.length?'+ Otro objetivo':'Sin objetivo · elegir'}</option>${opts.map(o=>`<option value="${o.id}">🎯 ${esc(o.title)}</option>`).join('')}</select>`:cur.length?'':'<span class="small muted">No hay objetivos este mes</span>'}</div></div>
       <div class="stepper"><button data-act="it-min" data-b="${bi}" data-i="${ii}" data-d="-5" aria-label="Menos minutos">−</button><span>${it.min}′</span><button data-act="it-min" data-b="${bi}" data-i="${ii}" data-d="5" aria-label="Más minutos">+</button></div>
       <button class="x" data-act="it-rm" data-b="${bi}" data-i="${ii}" aria-label="Quitar">×</button></div>`});
     h+=`</div>${pickerFor===bi?`<div class="picker"><div class="row between"><b class="small">Añadir a ${esc(b.name).toLowerCase()}</b><button class="btn btn-ghost btn-s" data-act="pick-close">Cerrar</button></div><input type="search" id="pick-q" data-inp="pick-q" placeholder="Buscar ejercicio o etiqueta" value="${esc(pickQ)}"><div class="pick-list" id="pick-list">${pickListHTML()}</div></div>`
       :`<div class="add-row"><button class="btn btn-ghost btn-s" data-act="pick-open" data-b="${bi}" style="color:var(--blue)">+ Añadir ejercicio</button><button class="btn btn-ghost btn-s" data-act="it-water" data-b="${bi}" style="color:var(--blue)">💧 Agua</button></div>`}</div>`});
   h+=bkAddHTML(s);
-  if(mObjs.length){h+=`<div class="stack" style="gap:6px"><div class="eyebrow">Objetivos de ${monthName(monthKey(s.date))} en esta sesión</div>${mObjs.map(o=>{const mm=s.blocks.reduce((a,b)=>a+b.items.filter(i=>i.objId===o.id).reduce((x,i)=>x+i.min,0),0);
+  if(mObjs.length){h+=`<div class="stack" style="gap:6px"><div class="eyebrow">Objetivos de ${monthName(monthKey(s.date))} en esta sesión</div>${mObjs.map(o=>{const mm=s.blocks.reduce((a,b)=>a+b.items.filter(i=>itO(i).includes(o.id)).reduce((x,i)=>x+i.min,0),0);
     return `<div class="row between small"><span>${esc(o.title)}</span><b class="num" style="${mm?'':'color:var(--muted)'}">${mm} min</b></div>`}).join('')}</div>`}
   h+=`<div class="sheet-foot">${s.id?`<button class="btn btn-danger btn-ghost" data-act="sd-del">${SD._del?'¿Seguro? Eliminar':'Eliminar'}</button>`:''}${!empty?`<button class="btn" data-act="sd-tpl">Guardar como plantilla</button>`:''}<button class="btn btn-p" data-act="sd-save">Guardar sesión</button></div>`;
   return h}
@@ -1079,7 +1083,8 @@ CHG['sd-date']=el=>{if(el.value){SD.date=el.value;renderSheet()}};
 CHG['sd-time']=el=>{SD.time=el.value;renderSheet()};
 INP['sd-goal']=el=>{SD.goal=el.value};
 CHG['sd-dur']=el=>{SD.duration=+el.value;renderSheet()};
-CHG['it-obj']=el=>{SD.blocks[+el.dataset.b].items[+el.dataset.i].objId=el.value||null;renderSheet()};
+CHG['it-obj']=el=>{const it=SD.blocks[+el.dataset.b].items[+el.dataset.i];if(el.value)setO(it,[...itO(it),el.value]);renderSheet()};
+ACT['it-obj-rm']=el=>{const it=SD.blocks[+el.dataset.b].items[+el.dataset.i];setO(it,itO(it).filter(x=>x!==el.dataset.o));renderSheet()};
 ACT['it-min']=el=>{const it=SD.blocks[+el.dataset.b].items[+el.dataset.i];it.min=Math.max(it.water?1:5,it.min+ +el.dataset.d);renderSheet()};
 ACT['it-water']=el=>{SD.blocks[+el.dataset.b].items.push({id:uid(),water:true,min:2});renderSheet();toast('Pausa de agua añadida (2 min)')};
 ACT['it-rm']=el=>{SD.blocks[+el.dataset.b].items.splice(+el.dataset.i,1);renderSheet()};
@@ -1088,13 +1093,13 @@ ACT['pick-close']=()=>{pickerFor=null;renderSheet()};
 INP['pick-q']=el=>{pickQ=el.value;const l=$('#pick-list');if(l)l.innerHTML=pickListHTML()};
 function defaultObjFor(e,date){const mo=S.objectives.filter(o=>o.month===monthKey(date)&&o.status!=='conseguido');
   return (mo.find(o=>e.tags.some(t=>(o.title+' '+o.detail).toLowerCase().includes(t)))||{}).id||null}
-ACT['pick-ex']=el=>{const e=exById(el.dataset.id);SD.blocks[pickerFor].items.push({id:uid(),exId:e.id,min:e.minutes,objId:defaultObjFor(e,SD.date)});pickQ='';renderSheet();toast('Añadido: '+e.name)};
+ACT['pick-ex']=el=>{const e=exById(el.dataset.id);SD.blocks[pickerFor].items.push((x=>{setO(x,[defaultObjFor(e,SD.date)]);return x})({id:uid(),exId:e.id,min:e.minutes}));pickQ='';renderSheet();toast('Añadido: '+e.name)};
 ACT['add-sug']=el=>{const e=exById(el.dataset.id);const m=matchById(el.dataset.m);const bn=e.tags.some(t=>['bote','pase','tiro','tiro libre'].includes(t))&&!e.tags.includes('presión')?'Técnica':'Táctica';let bi=SD.blocks.findIndex(b=>b.name===bn);if(bi<0){SD.blocks.push({name:bn,items:[]});bi=SD.blocks.length-1}
-  SD.blocks[bi].items.push({id:uid(),exId:e.id,min:e.minutes,objId:m.objId||null});renderSheet();toast('Añadido a '+bn.toLowerCase()+': '+e.name)};
+  SD.blocks[bi].items.push((x=>{setO(x,[m.objId]);return x})({id:uid(),exId:e.id,min:e.minutes}));renderSheet();toast('Añadido a '+bn.toLowerCase()+': '+e.name)};
 ACT['resolve-rem']=el=>{const m=matchById(el.dataset.m);m.resolved=true;save();renderSheet();toast('Recordatorio cerrado')};
 ACT['copy-from']=el=>{const f=S.sessions.find(s=>s.id===el.dataset.id);const n=newDraft(SD.date,f);SD.blocks=n.blocks.filter(b=>b.items.length);SD.duration=n.duration;renderSheet();toast('Sesión copiada. Ajusta lo que quieras.')};
 ACT['copy-tpl']=el=>{const t=S.templates.find(x=>x.id===el.dataset.id);SD.blocks=clone(t.blocks).filter(b=>b.items.length).map(b=>({...b,items:b.items.map(i=>({...i,id:uid()}))}));renderSheet();toast('Plantilla aplicada')};
-ACT['sd-tpl']=()=>{S.templates.push({id:uid(),name:'Sesión del '+fmtDay(SD.date),blocks:clone(SD.blocks).map(b=>({...b,items:b.items.map(i=>({...i,objId:null}))}))});save();toast('Guardada como plantilla')};
+ACT['sd-tpl']=()=>{S.templates.push({id:uid(),name:'Sesión del '+fmtDay(SD.date),blocks:clone(SD.blocks).map(b=>({...b,items:b.items.map(i=>({...i,objId:null,objIds:[]}))}))});save();toast('Guardada como plantilla')};
 ACT['sd-del']=()=>{if(!SD._del){SD._del=true;renderSheet();return}S.sessions=S.sessions.filter(x=>x.id!==SD.id);save();closeSheet();render();toast('Sesión eliminada')};
 ACT['sd-save']=()=>{const s=SD;delete s._del;if(s.id){const old=S.sessions.find(x=>x.id===s.id);if(old&&(old.date!==s.date||old.time!==s.time)){const t=dayTrainings(old.date).find(x=>x.s&&x.s.id===old.id);const or=t&&t.occ;
     if(or){const hit=activeOn(s.date).find(o=>o.start===s.time&&o.key!==or.key);if(or.slotId){if(!S.schedEx.cancel.includes(or.key))S.schedEx.cancel.push(or.key);if(!hit)S.schedEx.extra.push({id:uid(),date:s.date,start:s.time,end:tfmt(tmin(s.time)+s.duration),type:or.type,movedFrom:or.date,fromKey:or.key})}
@@ -1164,7 +1169,7 @@ VIEWS.objetivos=()=>{const months=seasonMonths();if(!months.includes(objMonth))o
   ${monthShare(list)}<div class="stack">${list.length?list.map(objCard).join(''):`<div class="empty">No hay objetivos para ${monthName(objMonth)}. Añade uno o créalo desde la nota de un partido.</div>`}</div>`};
 function monthShare(list){const ss=S.sessions.filter(s=>monthKey(s.date)===objMonth&&s.date<TODAY);const total=ss.reduce((a,s)=>a+sessTotal(s),0);if(!total)return'';
   const sum=f=>ss.reduce((a,s)=>a+s.blocks.reduce((x,b)=>x+b.items.filter(f).reduce((y,i)=>y+(+i.min||0),0),0),0);
-  const rows=list.map(o=>({o,m:sum(i=>i.objId===o.id)})).sort((a,b)=>b.m-a.m);const linked=rows.reduce((a,r)=>a+r.m,0);const free=sum(i=>!i.objId);
+  const rows=list.map(o=>({o,m:sum(i=>itO(i).includes(o.id))})).sort((a,b)=>b.m-a.m);const linked=sum(i=>itO(i).some(x=>list.some(o=>o.id===x)));const free=sum(i=>!itO(i).length);
   const row=(label,m,cls)=>`<div class="share-row ${cls||''}"><div class="lbl"><span>${label}</span><b class="num">${m} min</b></div><div class="bar"><i style="width:${(m/total*100).toFixed(1)}%"></i></div></div>`;
   return `<section class="card"><div class="row between"><div class="eyebrow">Minutos entrenados en ${monthName(objMonth)}</div><span class="small muted num">${ss.length} ${ss.length===1?'entrenamiento hecho':'entrenamientos hechos'}</span></div>
   <div class="objmin"><span class="big">${total}</span><span class="small muted">min en total · <b style="color:var(--ink)" class="num">${linked}</b> dedicados a los objetivos del mes (${Math.round(linked/total*100)} %)</span></div>
@@ -1190,7 +1195,7 @@ ACT['new-obj']=()=>{OD={id:null,month:objMonth,title:'',detail:'',status:'pendie
 ACT['edit-obj']=el=>{OD=clone(objById(el.dataset.id));openSheet(objSheet)};
 INP['od-f']=el=>{OD[el.dataset.k]=el.value};
 CHG['od-s']=el=>{OD[el.dataset.k]=el.value};
-ACT['od-del']=()=>{if(!OD._del){OD._del=true;renderSheet();return}S.objectives=S.objectives.filter(x=>x.id!==OD.id);S.sessions.forEach(s=>s.blocks.forEach(b=>b.items.forEach(i=>{if(i.objId===OD.id)i.objId=null})));S.matches.forEach(m=>{if(m.objId===OD.id)m.objId=null});save();closeSheet();render();toast('Objetivo borrado')};
+ACT['od-del']=()=>{if(!OD._del){OD._del=true;renderSheet();return}S.objectives=S.objectives.filter(x=>x.id!==OD.id);S.sessions.forEach(s=>s.blocks.forEach(b=>b.items.forEach(i=>{if(itO(i).includes(OD.id))setO(i,itO(i).filter(x=>x!==OD.id))})));S.matches.forEach(m=>{if(m.objId===OD.id)m.objId=null});save();closeSheet();render();toast('Objetivo borrado')};
 ACT['od-save']=()=>{const o=OD;if(!o.title.trim()){toast('Escribe el objetivo');return}delete o._del;if(!o.id){o.id=uid();S.objectives.push(o)}else S.objectives=S.objectives.map(x=>x.id===o.id?o:x);objMonth=o.month;save();closeSheet();render();toast('Objetivo guardado')};
 
 /* ---------- PIZARRA ---------- */
