@@ -586,6 +586,9 @@ body.v-big .vtip{background:#e8eef3;color:#05080b}
 .pr-ses .ps-ex{display:flex;gap:10pt;break-inside:avoid;padding:5pt 0;border-bottom:.5pt solid #ccc}.pr-ses .ps-fig{flex:0 0 48mm}.pr-ses .ps-fig .pr-board{width:48mm;height:auto}
 .pr-ses .ps-txt{flex:1;min-width:0}.pr-ses .ps-txt p{margin:3pt 0}.pr-ses .ps-head{display:flex;gap:6pt;align-items:baseline}.pr-ses .ps-head b{flex:1;font-size:11pt}
 .pr-ses .ps-t{font-size:8.5pt;color:#555;font-variant-numeric:tabular-nums}.pr-ses .ps-water{padding:4pt 0;border-bottom:.5pt solid #ccc;break-inside:avoid}
+.pr-ses .ps-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:6pt 8pt;margin-top:5pt}.pr-ses .ps-steps.full{grid-template-columns:repeat(4,1fr)}
+.pr-ses .ps-steps figure{margin:0;break-inside:avoid}.pr-ses .ps-steps .pr-board{width:100%;height:auto}.pr-ses figcaption{font-size:8.5pt;line-height:1.25;margin-top:2pt}
+.pr-ses .ps-fig .ps-steps{display:block;margin:0}.pr-ses .ps-var{font-weight:700;font-size:9.5pt;margin-top:6pt}.pr-ses .ps-ex{break-inside:auto}.pr-ses .ps-head{break-after:avoid}
 </style>
 </head>
 <body>
@@ -2781,7 +2784,7 @@ function infoFix(o){const fix=ms=>(ms||[]).forEach(m=>{if(m&&m.note&&INFO_RX.tes
 {const _mg=migrate;migrate=function(o){const r=_mg(o)||o;infoFix(r);return r}}
 {const _ms2=matchSheet;matchSheet=function(){const h=_ms2();const m=MD;if(!m||!m.info)return h;const i=h.indexOf('</div>',h.indexOf('sheet-head')>=0?h.indexOf('sheet-head'):0);
   const line=`<div class="small muted" style="margin-top:-4px">${esc(m.info)}</div>`;const k=h.indexOf('<div class="grid2">');return k<0?line+h:h.slice(0,k)+line+h.slice(k)}}
-const BL_CFG={"url": "https://evwjgeoqttibwfjwuods.supabase.co", "key": "sb_publishable_ny4jgMIz_iRPiLHZ0WEnvQ_Yle4hSG1", "build": "03/11 23:09"};
+const BL_CFG={"url": "https://evwjgeoqttibwfjwuods.supabase.co", "key": "sb_publishable_ny4jgMIz_iRPiLHZ0WEnvQ_Yle4hSG1", "build": "04/11 00:52"};
 /* ---------- DATOS COMPARTIDOS: Claude (versión publicada) o Supabase (app propia) ---------- */
 const SYK=LS+'-sync',SYC='bl';const GKEYS=['exercises','templates','plays','scoutTpls'];
 const SY={db:null,ready:false,last:{},remote:{},busy:false,again:false,t:0,pending:false,st:'off',ro:false};
@@ -3065,6 +3068,11 @@ ACT['bk-add-c']=()=>{if(!BK.name.trim()){toast('Escribe el nombre del bloque');r
 ACT['bk-mv']=el=>{const i=+el.dataset.b,j=i+ +el.dataset.d;if(j<0||j>=SD.blocks.length)return;[SD.blocks[i],SD.blocks[j]]=[SD.blocks[j],SD.blocks[i]];pickerFor=null;BK.del=null;renderSheet()};
 ACT['bk-rm']=el=>{const i=+el.dataset.b;if(SD.blocks[i].items.length&&BK.del!==i){BK.del=i;renderSheet();return}SD.blocks.splice(i,1);pickerFor=null;BK.del=null;renderSheet()};
 /* ---------- Sesiones: imprimir o guardar en PDF para enviarla a otro entrenador ---------- */
+/* todos los pasos (y variantes) de un dibujo, para el PDF */
+function psSteps(board){const full=board.court==='full';const vs=board.vars&&board.vars.length?board.vars:[{name:'',frames:board.frames||[]}];
+  const one=f=>`<svg class="pr-board" viewBox="0 0 500 ${full?940:470}" aria-hidden="true">${courtSVG(full)}${frameSVG(f,1,board.roles)}</svg>`;
+  return vs.map((v,vi)=>{const fr=(v.frames||[]).filter(f=>(f.tokens||[]).length||(f.arrows||[]).length);if(!fr.length)return'';
+    return `${vs.length>1?`<div class="ps-var">${esc(v.name||'Opción '+(vi+1))}</div>`:''}<div class="ps-steps ${full?'full':''}">${fr.map((f,i)=>`<figure>${one(f)}${fr.length>1||(f.name||'').trim()||(f.note||'').trim()?`<figcaption><b>Paso ${i+1}${(f.name||'').trim()?' · '+esc(f.name.trim()):''}</b>${(f.note||'').trim()?`<br>${esc(f.note.trim())}`:''}</figcaption>`:''}</figure>`).join('')}</div>`}).join('')}
 function sesPrintHTML(s){const tot=sessTotal(s),end=tfmt(tmin(s.time)+s.duration);const R=S.roster||[];const att=s.att||{};
   const by=k=>R.filter(r=>(att[r.id]||'p')===k);const pres=by('p'),falta=by('f'),les=by('l');
   const nm=r=>`${r.dorsal?r.dorsal+' ':''}${r.name||''}`.trim();
@@ -3080,13 +3088,13 @@ function sesPrintHTML(s){const tot=sessTotal(s),end=tfmt(tmin(s.time)+s.duration
     b.items.forEach(it=>{const from=tfmt(t);t+=+it.min||0;
       if(it.water){h+=`<div class="ps-water"><span class="ps-t">${from}</span> 💧 Agua · ${it.min} min</div>`;return}
       const e=exById(it.exId);const os=itO(it).map(objById).filter(Boolean);
-      const hasB=e&&e.board&&((e.board.frames||[]).some(f=>(f.tokens||[]).length)||(e.board.vars||[]).length);
-      h+=`<article class="ps-ex">${hasB?`<div class="ps-fig">${thumb(e.board,'pr-board')}</div>`:''}<div class="ps-txt">
+      const nSteps=e&&e.board?(e.board.vars&&e.board.vars.length?e.board.vars:[{frames:e.board.frames||[]}]).reduce((a,v)=>a+(v.frames||[]).filter(f=>(f.tokens||[]).length||(f.arrows||[]).length).length,0):0;const hasB=nSteps===1,many=nSteps>1;
+      h+=`<article class="ps-ex">${hasB?`<div class="ps-fig">${psSteps(e.board)}</div>`:''}<div class="ps-txt">
         <div class="ps-head"><span class="ps-t">${from}</span><b>${e?esc(e.name):'Ejercicio borrado'}</b><span class="ps-min">${it.min} min</span></div>
         ${e&&(e.players||e.material)?`<div class="pr-s">${[e.players&&('Jugadores: '+esc(String(e.players))),e.material&&('Material: '+esc(e.material))].filter(Boolean).join(' · ')}</div>`:''}
         ${e&&e.desc?`<p>${esc(e.desc).replace(/\n/g,'<br>')}</p>`:''}
         ${e&&e.keys?`<p><b>Claves:</b> ${esc(e.keys).replace(/\n/g,'<br>')}</p>`:''}
-        ${os.length?`<div class="pr-s">🎯 ${os.map(o=>esc(o.title)).join(' · ')}</div>`:''}</div></article>`});
+        ${os.length?`<div class="pr-s">🎯 ${os.map(o=>esc(o.title)).join(' · ')}</div>`:''}${many?psSteps(e.board):''}</div></article>`});
     h+=`</section>`});
   if(!s.blocks.some(b=>b.items.length))h+=`<p class="pr-empty">Sesión sin ejercicios.</p>`;
   return h+`<footer class="pr-f">Basket Lover · ${fmtDay(TODAY)}</footer>`}
