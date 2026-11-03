@@ -576,6 +576,7 @@ body.v-big .vtip{background:#e8eef3;color:#05080b}
 }
 .ph-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border:1.5px dashed var(--accent);border-radius:10px}.ph-bar input[type=range]{width:120px}
 .pf-bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.pf-new{display:inline-flex;gap:4px;align-items:center}.pf-new input{width:200px;max-width:60vw}.pf-add{border-style:dashed}.pf-mv{padding:0 10px 10px}.pf-mv select{width:100%;font-size:12.5px;padding:4px 6px}
+.bk-b{all:unset;cursor:pointer;min-width:26px;height:26px;text-align:center;border-radius:6px;color:var(--muted);font-size:14px}.bk-b:hover{background:var(--line)}.bk-add{display:flex;flex-direction:column;gap:6px;padding:4px 0}
 </style>
 </head>
 <body>
@@ -1029,9 +1030,9 @@ ACT['new-match']=el=>openMatch(null,null,el.dataset.d);
 
 /* ---------- SESIONES ---------- */
 let SD=null,pickerFor=null,pickQ='';
-function newDraft(date,from,occ){if(!occ){const t=dayTrainings(date).find(x=>!x.s&&x.occ);occ=t?t.occ:null}const base={id:null,date,time:occ?occ.start:'18:00',duration:occ?durOf(occ.start,occ.end):90,type:occ?occ.type:'Pista',blocks:BLOCKS.map(n=>({name:n,items:[]}))};
+function newDraft(date,from,occ){if(!occ){const t=dayTrainings(date).find(x=>!x.s&&x.occ);occ=t?t.occ:null}const base={id:null,date,time:occ?occ.start:'18:00',duration:occ?durOf(occ.start,occ.end):90,type:occ?occ.type:'Pista',blocks:[]};
   if(from){base.blocks=clone(from.blocks).map(b=>({...b,items:b.items.map(i=>({...i,id:uid()}))}));if(!occ){base.duration=from.duration;base.time=from.time}if(from.goal)base.goal=from.goal}return base}
-function openSessionDraft(d){SD=d;if(!SD.att&&(S.roster||[]).length){SD.att={};S.roster.forEach(r=>SD.att[r.id]='p')}pickerFor=null;pickQ='';openSheet(sessionSheet,afterSession)}
+function openSessionDraft(d){SD=d;SD.blocks=SD.blocks||[];if(SD.blocks.map(b=>b.name).join('|')===BLOCKS.join('|'))SD.blocks=SD.blocks.filter(b=>b.items.length);/* las antiguas traían los 5 bloques fijos */BK.adding=false;BK.name='';if(!SD.att&&(S.roster||[]).length){SD.att={};S.roster.forEach(r=>SD.att[r.id]='p')}pickerFor=null;pickQ='';openSheet(sessionSheet,afterSession)}
 ACT['new-session']=el=>{const d=el.dataset.d||nextFreeTraining()||TODAY;openSessionDraft(newDraft(d,null,el.dataset.k?occByKey(d,el.dataset.k):null))};
 ACT['open-session']=el=>{const s=S.sessions.find(x=>x.id===el.dataset.id);if(s)openSessionDraft(clone(s))};
 ACT['dup-session']=el=>{const s=S.sessions.find(x=>x.id===el.dataset.id);const d=nextFreeTraining();if(!d){toast('No hay entrenamientos libres en las próximas semanas');return}openSessionDraft(newDraft(d,s));toast('Copiada al '+fmtDay(d)+'. Cambia lo que necesites.')};
@@ -1056,7 +1057,7 @@ function sessionSheet(){const s=SD;const total=sessTotal(s);const diff=s.duratio
     h+=`<div class="quick"><b>Empieza rápido</b><div class="chips">${prev.map(p=>`<button class="chip" data-act="copy-from" data-id="${p.id}">Copiar la del ${fmtDay(p.date)}</button>`).join('')}${S.templates.map(t=>`<button class="chip" data-act="copy-tpl" data-id="${t.id}">Plantilla: ${esc(t.name)}</button>`).join('')}</div><span class="small muted">O añade ejercicios bloque a bloque.</span></div>`}
   h+=`<div class="stack" style="gap:6px"><div class="row between small"><b class="num">${total} de ${s.duration} min</b><span class="${diff<0?'':'muted'}" style="${diff<0?'color:var(--bad);font-weight:600':''}">${diff>0?`Quedan ${diff} min libres`:diff<0?`Te pasas ${-diff} min`:'Cuadra justo'}</span></div><div class="bar ${diff<0?'over':diff===0?'full':''}"><i style="width:${pct}%"></i></div></div>`;
   s.blocks.forEach((b,bi)=>{const sub=b.items.reduce((a,i)=>a+(+i.min||0),0);
-    h+=`<div class="block"><div class="block-h"><b>${esc(b.name)}</b><span class="small muted num">${sub} min</span></div><div class="items">`;
+    h+=`<div class="block"><div class="block-h"><b>${esc(b.name)}</b><span class="row" style="gap:2px"><span class="small muted num" style="margin-right:6px">${sub} min</span>${bi>0?`<button class="bk-b" data-act="bk-mv" data-b="${bi}" data-d="-1" aria-label="Subir bloque">↑</button>`:''}${bi<s.blocks.length-1?`<button class="bk-b" data-act="bk-mv" data-b="${bi}" data-d="1" aria-label="Bajar bloque">↓</button>`:''}<button class="bk-b" data-act="bk-rm" data-b="${bi}" aria-label="Quitar bloque">${BK.del===bi?'¿Quitar?':'×'}</button></span></div><div class="items">`;
     b.items.forEach((it,ii)=>{const e=exById(it.exId);const opts=[...mObjs];const lo=it.objId&&objById(it.objId);if(lo&&!opts.includes(lo))opts.push(lo);
       h+=`<div class="item"><div class="item-main"><b>${e?esc(e.name):'Ejercicio borrado'}</b><select data-chg="it-obj" data-b="${bi}" data-i="${ii}" aria-label="Objetivo">
       <option value="">Sin objetivo</option>${opts.map(o=>`<option value="${o.id}" ${o.id===it.objId?'selected':''}>🎯 ${esc(o.title)}</option>`).join('')}</select></div>
@@ -1064,6 +1065,7 @@ function sessionSheet(){const s=SD;const total=sessTotal(s);const diff=s.duratio
       <button class="x" data-act="it-rm" data-b="${bi}" data-i="${ii}" aria-label="Quitar">×</button></div>`});
     h+=`</div>${pickerFor===bi?`<div class="picker"><div class="row between"><b class="small">Añadir a ${esc(b.name).toLowerCase()}</b><button class="btn btn-ghost btn-s" data-act="pick-close">Cerrar</button></div><input type="search" id="pick-q" data-inp="pick-q" placeholder="Buscar ejercicio o etiqueta" value="${esc(pickQ)}"><div class="pick-list" id="pick-list">${pickListHTML()}</div></div>`
       :`<div class="add-row"><button class="btn btn-ghost btn-s" data-act="pick-open" data-b="${bi}" style="color:var(--blue)">+ Añadir ejercicio</button></div>`}</div>`});
+  h+=bkAddHTML(s);
   if(mObjs.length){h+=`<div class="stack" style="gap:6px"><div class="eyebrow">Objetivos de ${monthName(monthKey(s.date))} en esta sesión</div>${mObjs.map(o=>{const mm=s.blocks.reduce((a,b)=>a+b.items.filter(i=>i.objId===o.id).reduce((x,i)=>x+i.min,0),0);
     return `<div class="row between small"><span>${esc(o.title)}</span><b class="num" style="${mm?'':'color:var(--muted)'}">${mm} min</b></div>`}).join('')}</div>`}
   h+=`<div class="sheet-foot">${s.id?`<button class="btn btn-danger btn-ghost" data-act="sd-del">${SD._del?'¿Seguro? Eliminar':'Eliminar'}</button>`:''}${!empty?`<button class="btn" data-act="sd-tpl">Guardar como plantilla</button>`:''}<button class="btn btn-p" data-act="sd-save">Guardar sesión</button></div>`;
@@ -1081,11 +1083,11 @@ INP['pick-q']=el=>{pickQ=el.value;const l=$('#pick-list');if(l)l.innerHTML=pickL
 function defaultObjFor(e,date){const mo=S.objectives.filter(o=>o.month===monthKey(date)&&o.status!=='conseguido');
   return (mo.find(o=>e.tags.some(t=>(o.title+' '+o.detail).toLowerCase().includes(t)))||{}).id||null}
 ACT['pick-ex']=el=>{const e=exById(el.dataset.id);SD.blocks[pickerFor].items.push({id:uid(),exId:e.id,min:e.minutes,objId:defaultObjFor(e,SD.date)});pickQ='';renderSheet();toast('Añadido: '+e.name)};
-ACT['add-sug']=el=>{const e=exById(el.dataset.id);const m=matchById(el.dataset.m);const bi=e.tags.some(t=>['bote','pase','tiro','tiro libre'].includes(t))&&!e.tags.includes('presión')?1:2;
-  SD.blocks[bi].items.push({id:uid(),exId:e.id,min:e.minutes,objId:m.objId||null});renderSheet();toast('Añadido a '+BLOCKS[bi].toLowerCase()+': '+e.name)};
+ACT['add-sug']=el=>{const e=exById(el.dataset.id);const m=matchById(el.dataset.m);const bn=e.tags.some(t=>['bote','pase','tiro','tiro libre'].includes(t))&&!e.tags.includes('presión')?'Técnica':'Táctica';let bi=SD.blocks.findIndex(b=>b.name===bn);if(bi<0){SD.blocks.push({name:bn,items:[]});bi=SD.blocks.length-1}
+  SD.blocks[bi].items.push({id:uid(),exId:e.id,min:e.minutes,objId:m.objId||null});renderSheet();toast('Añadido a '+bn.toLowerCase()+': '+e.name)};
 ACT['resolve-rem']=el=>{const m=matchById(el.dataset.m);m.resolved=true;save();renderSheet();toast('Recordatorio cerrado')};
-ACT['copy-from']=el=>{const f=S.sessions.find(s=>s.id===el.dataset.id);const n=newDraft(SD.date,f);SD.blocks=n.blocks;SD.duration=n.duration;renderSheet();toast('Sesión copiada. Ajusta lo que quieras.')};
-ACT['copy-tpl']=el=>{const t=S.templates.find(x=>x.id===el.dataset.id);SD.blocks=clone(t.blocks).map(b=>({...b,items:b.items.map(i=>({...i,id:uid()}))}));renderSheet();toast('Plantilla aplicada')};
+ACT['copy-from']=el=>{const f=S.sessions.find(s=>s.id===el.dataset.id);const n=newDraft(SD.date,f);SD.blocks=n.blocks.filter(b=>b.items.length);SD.duration=n.duration;renderSheet();toast('Sesión copiada. Ajusta lo que quieras.')};
+ACT['copy-tpl']=el=>{const t=S.templates.find(x=>x.id===el.dataset.id);SD.blocks=clone(t.blocks).filter(b=>b.items.length).map(b=>({...b,items:b.items.map(i=>({...i,id:uid()}))}));renderSheet();toast('Plantilla aplicada')};
 ACT['sd-tpl']=()=>{S.templates.push({id:uid(),name:'Sesión del '+fmtDay(SD.date),blocks:clone(SD.blocks).map(b=>({...b,items:b.items.map(i=>({...i,objId:null}))}))});save();toast('Guardada como plantilla')};
 ACT['sd-del']=()=>{if(!SD._del){SD._del=true;renderSheet();return}S.sessions=S.sessions.filter(x=>x.id!==SD.id);save();closeSheet();render();toast('Sesión eliminada')};
 ACT['sd-save']=()=>{const s=SD;delete s._del;if(s.id){const old=S.sessions.find(x=>x.id===s.id);if(old&&(old.date!==s.date||old.time!==s.time)){const t=dayTrainings(old.date).find(x=>x.s&&x.s.id===old.id);const or=t&&t.occ;
@@ -3029,6 +3031,20 @@ CHG['pf-move']=el=>{const p=S.plays.find(x=>x.id===el.dataset.id);if(!p)return;c
 {const _ps=ACT['pd-save'];ACT['pd-save']=el=>{const before=new Set(S.plays.map(p=>p.id));const r=_ps(el);const c=pfCur();
   S.plays.filter(p=>!before.has(p.id)&&!p.scoutId).forEach(p=>{if(c.startsWith('t:'))p.team=c.slice(2);else if(c==='gen'||c==='all'||c==='riv')p.team=c==='gen'?undefined:S.teamId;else{const f=S.playFolders.find(x=>x.id===c);p.folder=c;if(f&&f.team)p.team=f.team}if(p.team===undefined)delete p.team});
   if(S.plays.some(p=>!before.has(p.id))){save();render()}return r}}
+
+/* bloques de la sesión: los elige el entrenador */
+const BK={adding:false,name:'',del:null};const BLOCK_OPTS=['Calentamiento','Técnica','Táctica','Físico','Juego','Vuelta a la calma'];
+function bkAddHTML(s){const have=new Set(s.blocks.map(b=>b.name.toLowerCase()));const opts=BLOCK_OPTS.filter(n=>!have.has(n.toLowerCase()));
+  return `<div class="bk-add"><span class="small muted">${s.blocks.length?'Añadir otro bloque':'Elige los bloques de este entrenamiento'}</span><div class="chips">${opts.map(n=>`<button class="chip" data-act="bk-add" data-n="${esc(n)}">+ ${esc(n)}</button>`).join('')}
+  ${BK.adding?`<span class="row" style="gap:4px"><input type="text" id="bk-name" data-inp="bk-name" value="${esc(BK.name)}" placeholder="Ej.: Tiro, Rebote, 1x1" aria-label="Nombre del bloque" style="width:170px"><button class="btn btn-s btn-p" data-act="bk-add-c">Añadir</button><button class="btn btn-s btn-ghost" data-act="bk-cancel" aria-label="Cancelar">✕</button></span>`:`<button class="chip pf-add" data-act="bk-other">+ Otro…</button>`}</div></div>`}
+function bkPush(n){n=(n||'').trim().slice(0,40);if(!n)return;if(SD.blocks.some(b=>b.name.toLowerCase()===n.toLowerCase())){toast('Ya tienes el bloque '+n);return}SD.blocks.push({name:n,items:[]});pickerFor=SD.blocks.length-1;pickQ='';BK.del=null;renderSheet()}
+ACT['bk-add']=el=>bkPush(el.dataset.n);
+ACT['bk-other']=()=>{BK.adding=true;BK.name='';renderSheet();setTimeout(()=>{const i=$('#bk-name');if(i)i.focus()},30)};
+ACT['bk-cancel']=()=>{BK.adding=false;renderSheet()};
+INP['bk-name']=el=>{BK.name=el.value};
+ACT['bk-add-c']=()=>{if(!BK.name.trim()){toast('Escribe el nombre del bloque');return}BK.adding=false;bkPush(BK.name)};
+ACT['bk-mv']=el=>{const i=+el.dataset.b,j=i+ +el.dataset.d;if(j<0||j>=SD.blocks.length)return;[SD.blocks[i],SD.blocks[j]]=[SD.blocks[j],SD.blocks[i]];pickerFor=null;BK.del=null;renderSheet()};
+ACT['bk-rm']=el=>{const i=+el.dataset.b;if(SD.blocks[i].items.length&&BK.del!==i){BK.del=i;renderSheet();return}SD.blocks.splice(i,1);pickerFor=null;BK.del=null;renderSheet()};
 
 /* ---------- APP: copia de seguridad, almacenamiento persistente y modo sin conexión ---------- */
 ACT['bk-export']=()=>{try{const blob=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='basket-lover-copia-'+TODAY+'.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);toast('Copia descargada')}catch(e){toast('No se ha podido descargar la copia')}};
