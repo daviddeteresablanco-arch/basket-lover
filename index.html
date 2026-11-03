@@ -923,7 +923,7 @@ function evRow(ev){
   if(ev.kind==='session'){const s=ev.s;const objs=sessObjs(s).map(objById).filter(Boolean);
     return `<button class="ev" data-act="open-session" data-id="${s.id}"><div class="when"><b>${parse(s.date).getDate()}</b><small>${WD[parse(s.date).getDay()]}</small></div>
     <div class="what"><div class="row"><span class="pill p-train">Entreno${typeTxt(s.type||(ev.occ&&ev.occ.type))}</span>${ev.occ&&ev.occ.movedFrom?`<span class="pill p-empty">Movido del ${fmtDay(ev.occ.movedFrom)}</span>`:''}<span class="small muted num">${s.time}–${tfmt(tmin(s.time)+s.duration)} · ${sessTotal(s)}/${s.duration} min${s.att&&(S.roster||[]).length?` · ${S.roster.filter(r=>(s.att[r.id]||'p')==='p').length}/${S.roster.length} jugadores`:''}</span></div>
-    ${objs.length?`<div class="chips">${objs.map(o=>`<span class="tag">${esc(o.title)}</span>`).join('')}</div>`:'<span class="small muted">Sin objetivos vinculados</span>'}</div></button>`}
+    ${(s.goal||'').trim()?`<span class="small"><b>Objetivo:</b> ${esc(s.goal.trim())}</span>`:''}${objs.length?`<div class="chips">${objs.map(o=>`<span class="tag">${esc(o.title)}</span>`).join('')}</div>`:(s.goal||'').trim()?'':'<span class="small muted">Sin objetivos vinculados</span>'}</div></button>`}
   if(ev.kind==='cancelled')return cancelledRow(ev);
   const o=ev.occ;return `<button class="ev virtual" data-act="new-session" data-d="${ev.date}" data-k="${o?o.key:''}"><div class="when"><b>${parse(ev.date).getDate()}</b><small>${WD[parse(ev.date).getDay()]}</small></div>
     <div class="what"><div class="row"><span class="pill p-empty">Sin planificar</span>${o&&o.movedFrom?`<span class="pill p-empty">Movido del ${fmtDay(o.movedFrom)}</span>`:''}<span class="small muted num">${o?occLabel(o):''}</span></div><b>${o&&o.type&&o.type!=='Pista'?esc(o.type):'Entrenamiento'}</b></div><span class="btn btn-b btn-s">Planificar</span></button>`;
@@ -1030,7 +1030,7 @@ ACT['new-match']=el=>openMatch(null,null,el.dataset.d);
 /* ---------- SESIONES ---------- */
 let SD=null,pickerFor=null,pickQ='';
 function newDraft(date,from,occ){if(!occ){const t=dayTrainings(date).find(x=>!x.s&&x.occ);occ=t?t.occ:null}const base={id:null,date,time:occ?occ.start:'18:00',duration:occ?durOf(occ.start,occ.end):90,type:occ?occ.type:'Pista',blocks:BLOCKS.map(n=>({name:n,items:[]}))};
-  if(from){base.blocks=clone(from.blocks).map(b=>({...b,items:b.items.map(i=>({...i,id:uid()}))}));if(!occ){base.duration=from.duration;base.time=from.time}}return base}
+  if(from){base.blocks=clone(from.blocks).map(b=>({...b,items:b.items.map(i=>({...i,id:uid()}))}));if(!occ){base.duration=from.duration;base.time=from.time}if(from.goal)base.goal=from.goal}return base}
 function openSessionDraft(d){SD=d;if(!SD.att&&(S.roster||[]).length){SD.att={};S.roster.forEach(r=>SD.att[r.id]='p')}pickerFor=null;pickQ='';openSheet(sessionSheet,afterSession)}
 ACT['new-session']=el=>{const d=el.dataset.d||nextFreeTraining()||TODAY;openSessionDraft(newDraft(d,null,el.dataset.k?occByKey(d,el.dataset.k):null))};
 ACT['open-session']=el=>{const s=S.sessions.find(x=>x.id===el.dataset.id);if(s)openSessionDraft(clone(s))};
@@ -1048,6 +1048,7 @@ function sessionSheet(){const s=SD;const total=sessTotal(s);const diff=s.duratio
   let h=sheetHead(s.id?'Sesión de entrenamiento':'Nueva sesión',cap(fmtDay(s.date))+' · '+s.time);
   h+=`<div class="grid3"><label class="f">Fecha<input type="date" data-chg="sd-date" value="${s.date}"></label><label class="f">Hora<input type="time" data-chg="sd-time" value="${s.time}"></label>
   <label class="f">Duración<select data-chg="sd-dur">${[...new Set([30,45,60,75,90,105,120,s.duration])].sort((a,b)=>a-b).map(v=>`<option value="${v}" ${v==s.duration?'selected':''}>${v} min</option>`).join('')}</select></label></div>`;
+  h+=`<label class="f">Objetivo del entrenamiento<textarea rows="2" data-inp="sd-goal" placeholder="Ej.: mejorar el balance defensivo tras tiro y cerrar el rebote">${esc(s.goal||'')}</textarea></label>`;
   h+=attHTML();
   h+=rems.map(m=>{const an=analyzeNote(m.note);const sug=S.exercises.filter(e=>e.tags.some(t=>an.tags.includes(t))).sort((a,b)=>b.fav-a.fav).slice(0,3);
     return reminderBox(m,`${sug.length?`<div class="chips">${sug.map(e=>`<button class="chip" data-act="add-sug" data-id="${e.id}" data-m="${m.id}">+ ${esc(e.name)}</button>`).join('')}</div>`:''}<div><button class="btn btn-s" data-act="resolve-rem" data-m="${m.id}">Ya lo he trabajado</button></div>`)}).join('');
@@ -1069,6 +1070,7 @@ function sessionSheet(){const s=SD;const total=sessTotal(s);const diff=s.duratio
   return h}
 CHG['sd-date']=el=>{if(el.value){SD.date=el.value;renderSheet()}};
 CHG['sd-time']=el=>{SD.time=el.value;renderSheet()};
+INP['sd-goal']=el=>{SD.goal=el.value};
 CHG['sd-dur']=el=>{SD.duration=+el.value;renderSheet()};
 CHG['it-obj']=el=>{SD.blocks[+el.dataset.b].items[+el.dataset.i].objId=el.value||null;renderSheet()};
 ACT['it-min']=el=>{const it=SD.blocks[+el.dataset.b].items[+el.dataset.i];it.min=Math.max(5,it.min+ +el.dataset.d);renderSheet()};
