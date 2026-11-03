@@ -580,6 +580,7 @@ body.v-big .vtip{background:#e8eef3;color:#05080b}
 .bk-b{all:unset;cursor:pointer;min-width:26px;height:26px;text-align:center;border-radius:6px;color:var(--muted);font-size:14px}.bk-b:hover{background:var(--line)}.bk-add{display:flex;flex-direction:column;gap:6px;padding:4px 0}
 .item-water{background:color-mix(in srgb,var(--blue) 7%,transparent)}
 .it-objs{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:3px}.it-objs select{font-size:12.5px;padding:3px 6px;max-width:100%}.it-o{display:inline-flex;align-items:center;gap:2px}.it-o button{all:unset;cursor:pointer;padding:0 3px;font-weight:700;opacity:.7}
+.it-objs .it-o{all:unset;cursor:pointer;font-size:12px;line-height:1.2;padding:4px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);background:var(--card)}.it-objs .it-o.on{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
 </style>
 </head>
 <body>
@@ -1068,8 +1069,7 @@ function sessionSheet(){const s=SD;const total=sessTotal(s);const diff=s.duratio
     b.items.forEach((it,ii)=>{if(it.water){h+=`<div class="item item-water"><div class="item-main"><b>💧 Agua</b><span class="small muted">Pausa para beber</span></div>
       <div class="stepper"><button data-act="it-min" data-b="${bi}" data-i="${ii}" data-d="-1" aria-label="Menos minutos">−</button><span>${it.min}′</span><button data-act="it-min" data-b="${bi}" data-i="${ii}" data-d="1" aria-label="Más minutos">+</button></div>
       <button class="x" data-act="it-rm" data-b="${bi}" data-i="${ii}" aria-label="Quitar">×</button></div>`;return}const e=exById(it.exId);const cur=itO(it).map(objById).filter(Boolean);const opts=mObjs.filter(o=>!cur.includes(o));
-      h+=`<div class="item"><div class="item-main"><b>${e?esc(e.name):'Ejercicio borrado'}</b><div class="it-objs">${cur.map(o=>`<span class="tag it-o">🎯 ${esc(o.title)}<button data-act="it-obj-rm" data-b="${bi}" data-i="${ii}" data-o="${o.id}" aria-label="Quitar objetivo ${esc(o.title)}">×</button></span>`).join('')}
-      ${opts.length?`<select data-chg="it-obj" data-b="${bi}" data-i="${ii}" aria-label="Añadir objetivo"><option value="">${cur.length?'+ Otro objetivo':'Sin objetivo · elegir'}</option>${opts.map(o=>`<option value="${o.id}">🎯 ${esc(o.title)}</option>`).join('')}</select>`:cur.length?'':'<span class="small muted">No hay objetivos este mes</span>'}</div></div>
+      h+=`<div class="item"><div class="item-main"><b>${e?esc(e.name):'Ejercicio borrado'}</b><div class="it-objs" role="group" aria-label="Objetivos del ejercicio (puedes marcar varios)">${[...cur,...opts].map(o=>{const on=cur.includes(o);return `<button class="it-o ${on?'on':''}" data-act="it-obj-tg" data-b="${bi}" data-i="${ii}" data-o="${o.id}" aria-pressed="${on}">${on?'✓':'+'} ${esc(o.title)}</button>`}).join('')}${cur.length||opts.length?'':`<span class="small muted">No hay objetivos en ${monthName(monthKey(s.date))}. Créalos en Objetivos.</span>`}</div></div>
       <div class="stepper"><button data-act="it-min" data-b="${bi}" data-i="${ii}" data-d="-5" aria-label="Menos minutos">−</button><span>${it.min}′</span><button data-act="it-min" data-b="${bi}" data-i="${ii}" data-d="5" aria-label="Más minutos">+</button></div>
       <button class="x" data-act="it-rm" data-b="${bi}" data-i="${ii}" aria-label="Quitar">×</button></div>`});
     h+=`</div>${pickerFor===bi?`<div class="picker"><div class="row between"><b class="small">Añadir a ${esc(b.name).toLowerCase()}</b><button class="btn btn-ghost btn-s" data-act="pick-close">Cerrar</button></div><input type="search" id="pick-q" data-inp="pick-q" placeholder="Buscar ejercicio o etiqueta" value="${esc(pickQ)}"><div class="pick-list" id="pick-list">${pickListHTML()}</div></div>`
@@ -1084,6 +1084,7 @@ CHG['sd-time']=el=>{SD.time=el.value;renderSheet()};
 INP['sd-goal']=el=>{SD.goal=el.value};
 CHG['sd-dur']=el=>{SD.duration=+el.value;renderSheet()};
 CHG['it-obj']=el=>{const it=SD.blocks[+el.dataset.b].items[+el.dataset.i];if(el.value)setO(it,[...itO(it),el.value]);renderSheet()};
+ACT['it-obj-tg']=el=>{const it=SD.blocks[+el.dataset.b].items[+el.dataset.i];const o=el.dataset.o;setO(it,itO(it).includes(o)?itO(it).filter(x=>x!==o):[...itO(it),o]);renderSheet()};
 ACT['it-obj-rm']=el=>{const it=SD.blocks[+el.dataset.b].items[+el.dataset.i];setO(it,itO(it).filter(x=>x!==el.dataset.o));renderSheet()};
 ACT['it-min']=el=>{const it=SD.blocks[+el.dataset.b].items[+el.dataset.i];it.min=Math.max(it.water?1:5,it.min+ +el.dataset.d);renderSheet()};
 ACT['it-water']=el=>{SD.blocks[+el.dataset.b].items.push({id:uid(),water:true,min:2});renderSheet();toast('Pausa de agua añadida (2 min)')};
@@ -2775,7 +2776,7 @@ function infoFix(o){const fix=ms=>(ms||[]).forEach(m=>{if(m&&m.note&&INFO_RX.tes
 {const _mg=migrate;migrate=function(o){const r=_mg(o)||o;infoFix(r);return r}}
 {const _ms2=matchSheet;matchSheet=function(){const h=_ms2();const m=MD;if(!m||!m.info)return h;const i=h.indexOf('</div>',h.indexOf('sheet-head')>=0?h.indexOf('sheet-head'):0);
   const line=`<div class="small muted" style="margin-top:-4px">${esc(m.info)}</div>`;const k=h.indexOf('<div class="grid2">');return k<0?line+h:h.slice(0,k)+line+h.slice(k)}}
-const BL_CFG={"url": "https://evwjgeoqttibwfjwuods.supabase.co", "key": "sb_publishable_ny4jgMIz_iRPiLHZ0WEnvQ_Yle4hSG1"};
+const BL_CFG={"url": "https://evwjgeoqttibwfjwuods.supabase.co", "key": "sb_publishable_ny4jgMIz_iRPiLHZ0WEnvQ_Yle4hSG1", "build": "03/11 22:44"};
 /* ---------- DATOS COMPARTIDOS: Claude (versión publicada) o Supabase (app propia) ---------- */
 const SYK=LS+'-sync',SYC='bl';const GKEYS=['exercises','templates','plays','scoutTpls'];
 const SY={db:null,ready:false,last:{},remote:{},busy:false,again:false,t:0,pending:false,st:'off',ro:false};
@@ -2974,7 +2975,7 @@ ACT['sy-acct']=()=>{if(!SB.cli){if(SY.db)toast(SY.st==='off'?'Sin conexión: los
    <div class="sheet-foot">${sbOutBtn()}<button class="btn" data-act="teams">Tus equipos</button></div>`)};
 /* también en Ajustes */
 {const _st=ACT['settings'];ACT['settings']=(...a)=>{_st(...a);if(!SB.cli||!SH)return;const r=SH.render;SH.render=()=>{const h=r();
-  const box=SB.user?`<hr class="sep"><div class="stack" style="gap:6px"><b>Tu cuenta</b><span class="small muted">Has entrado como <b>${esc(SB.user.email||'')}</b>. Al cerrar sesión se borran los datos de este dispositivo; siguen en tu cuenta y vuelven al entrar.</span><div class="row">${sbOutBtn()}</div></div>`
+  const box=SB.user?`<hr class="sep"><div class="stack" style="gap:6px"><b>Tu cuenta</b><span class="small muted">${typeof BL_CFG!=='undefined'&&BL_CFG.build?`Versión de la app: <b>${esc(BL_CFG.build)}</b><br>`:''}Has entrado como <b>${esc(SB.user.email||'')}</b>. Al cerrar sesión se borran los datos de este dispositivo; siguen en tu cuenta y vuelven al entrar.</span><div class="row">${sbOutBtn()}</div></div>`
     :`<hr class="sep"><div class="stack" style="gap:6px"><b>Tu cuenta</b><span class="small muted">Estás usando la app sin cuenta: tus datos solo están en este dispositivo.</span><div class="row"><button class="btn btn-s btn-p" data-act="sy-acct">Entrar o crear cuenta</button></div></div>`;
   const i=h.lastIndexOf('<div class="sheet-foot">');return i<0?h+box:h.slice(0,i)+box+h.slice(i)};renderSheet()}}
 /* «Tus equipos»: el código siempre a la vista */
