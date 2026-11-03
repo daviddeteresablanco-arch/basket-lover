@@ -581,6 +581,11 @@ body.v-big .vtip{background:#e8eef3;color:#05080b}
 .item-water{background:color-mix(in srgb,var(--blue) 7%,transparent)}
 .it-objs{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:3px}.it-objs select{font-size:12.5px;padding:3px 6px;max-width:100%}.it-o{display:inline-flex;align-items:center;gap:2px}.it-o button{all:unset;cursor:pointer;padding:0 3px;font-weight:700;opacity:.7}
 .it-objs .it-o{all:unset;cursor:pointer;font-size:12px;line-height:1.2;padding:4px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);background:var(--card)}.it-objs .it-o.on{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
+.pr-ses .ps-goal{border:1.2pt solid #000;padding:6pt 8pt;margin:8pt 0;border-radius:4pt}.pr-ses .ps-goal p{margin:2pt 0 0}
+.pr-ses .ps-block h2{display:flex;justify-content:space-between}.pr-ses .ps-min{font-weight:400;text-transform:none;letter-spacing:0}
+.pr-ses .ps-ex{display:flex;gap:10pt;break-inside:avoid;padding:5pt 0;border-bottom:.5pt solid #ccc}.pr-ses .ps-fig{flex:0 0 48mm}.pr-ses .ps-fig .pr-board{width:48mm;height:auto}
+.pr-ses .ps-txt{flex:1;min-width:0}.pr-ses .ps-txt p{margin:3pt 0}.pr-ses .ps-head{display:flex;gap:6pt;align-items:baseline}.pr-ses .ps-head b{flex:1;font-size:11pt}
+.pr-ses .ps-t{font-size:8.5pt;color:#555;font-variant-numeric:tabular-nums}.pr-ses .ps-water{padding:4pt 0;border-bottom:.5pt solid #ccc;break-inside:avoid}
 </style>
 </head>
 <body>
@@ -2776,7 +2781,7 @@ function infoFix(o){const fix=ms=>(ms||[]).forEach(m=>{if(m&&m.note&&INFO_RX.tes
 {const _mg=migrate;migrate=function(o){const r=_mg(o)||o;infoFix(r);return r}}
 {const _ms2=matchSheet;matchSheet=function(){const h=_ms2();const m=MD;if(!m||!m.info)return h;const i=h.indexOf('</div>',h.indexOf('sheet-head')>=0?h.indexOf('sheet-head'):0);
   const line=`<div class="small muted" style="margin-top:-4px">${esc(m.info)}</div>`;const k=h.indexOf('<div class="grid2">');return k<0?line+h:h.slice(0,k)+line+h.slice(k)}}
-const BL_CFG={"url": "https://evwjgeoqttibwfjwuods.supabase.co", "key": "sb_publishable_ny4jgMIz_iRPiLHZ0WEnvQ_Yle4hSG1", "build": "03/11 22:44"};
+const BL_CFG={"url": "https://evwjgeoqttibwfjwuods.supabase.co", "key": "sb_publishable_ny4jgMIz_iRPiLHZ0WEnvQ_Yle4hSG1", "build": "03/11 23:09"};
 /* ---------- DATOS COMPARTIDOS: Claude (versión publicada) o Supabase (app propia) ---------- */
 const SYK=LS+'-sync',SYC='bl';const GKEYS=['exercises','templates','plays','scoutTpls'];
 const SY={db:null,ready:false,last:{},remote:{},busy:false,again:false,t:0,pending:false,st:'off',ro:false};
@@ -3059,6 +3064,37 @@ INP['bk-name']=el=>{BK.name=el.value};
 ACT['bk-add-c']=()=>{if(!BK.name.trim()){toast('Escribe el nombre del bloque');return}BK.adding=false;bkPush(BK.name)};
 ACT['bk-mv']=el=>{const i=+el.dataset.b,j=i+ +el.dataset.d;if(j<0||j>=SD.blocks.length)return;[SD.blocks[i],SD.blocks[j]]=[SD.blocks[j],SD.blocks[i]];pickerFor=null;BK.del=null;renderSheet()};
 ACT['bk-rm']=el=>{const i=+el.dataset.b;if(SD.blocks[i].items.length&&BK.del!==i){BK.del=i;renderSheet();return}SD.blocks.splice(i,1);pickerFor=null;BK.del=null;renderSheet()};
+/* ---------- Sesiones: imprimir o guardar en PDF para enviarla a otro entrenador ---------- */
+function sesPrintHTML(s){const tot=sessTotal(s),end=tfmt(tmin(s.time)+s.duration);const R=S.roster||[];const att=s.att||{};
+  const by=k=>R.filter(r=>(att[r.id]||'p')===k);const pres=by('p'),falta=by('f'),les=by('l');
+  const nm=r=>`${r.dorsal?r.dorsal+' ':''}${r.name||''}`.trim();
+  const ob=sessObjs(s).map(objById).filter(Boolean).map(o=>({o,m:s.blocks.reduce((a,b)=>a+b.items.filter(i=>itO(i).includes(o.id)).reduce((x,i)=>x+(+i.min||0),0),0)}));
+  let h=`<header class="pr-h"><div><div class="pr-k">Entrenamiento · ${esc(S.settings.team||'')}${S.settings.category?' '+esc(S.settings.category):''}</div><h1>${esc(cap(fmtDay(s.date)))}</h1></div>
+    <div class="pr-meta">${s.time}–${end} · ${s.duration} min<br>${esc(s.type||'Pista')} · ${tot} min planificados</div></header>`;
+  if((s.goal||'').trim())h+=`<section class="ps-goal"><b>Objetivo del entrenamiento</b><p>${esc(s.goal.trim()).replace(/\n/g,'<br>')}</p></section>`;
+  if(ob.length)h+=`<p class="pr-line"><b>Objetivos del mes:</b> ${ob.map(x=>`${esc(x.o.title)} (${x.m} min)`).join(' · ')}</p>`;
+  if(R.length)h+=`<p class="pr-line"><b>Asistencia:</b> ${pres.length} de ${R.length}${falta.length?` · Faltan: ${falta.map(nm).map(esc).join(', ')}`:''}${les.length?` · Lesionados: ${les.map(nm).map(esc).join(', ')}`:''}</p>`;
+  let t=tmin(s.time);
+  s.blocks.filter(b=>b.items.length).forEach(b=>{const sub=b.items.reduce((a,i)=>a+(+i.min||0),0);
+    h+=`<section class="ps-block"><h2>${esc(b.name)} <span class="ps-min">${sub} min</span></h2>`;
+    b.items.forEach(it=>{const from=tfmt(t);t+=+it.min||0;
+      if(it.water){h+=`<div class="ps-water"><span class="ps-t">${from}</span> 💧 Agua · ${it.min} min</div>`;return}
+      const e=exById(it.exId);const os=itO(it).map(objById).filter(Boolean);
+      const hasB=e&&e.board&&((e.board.frames||[]).some(f=>(f.tokens||[]).length)||(e.board.vars||[]).length);
+      h+=`<article class="ps-ex">${hasB?`<div class="ps-fig">${thumb(e.board,'pr-board')}</div>`:''}<div class="ps-txt">
+        <div class="ps-head"><span class="ps-t">${from}</span><b>${e?esc(e.name):'Ejercicio borrado'}</b><span class="ps-min">${it.min} min</span></div>
+        ${e&&(e.players||e.material)?`<div class="pr-s">${[e.players&&('Jugadores: '+esc(String(e.players))),e.material&&('Material: '+esc(e.material))].filter(Boolean).join(' · ')}</div>`:''}
+        ${e&&e.desc?`<p>${esc(e.desc).replace(/\n/g,'<br>')}</p>`:''}
+        ${e&&e.keys?`<p><b>Claves:</b> ${esc(e.keys).replace(/\n/g,'<br>')}</p>`:''}
+        ${os.length?`<div class="pr-s">🎯 ${os.map(o=>esc(o.title)).join(' · ')}</div>`:''}</div></article>`});
+    h+=`</section>`});
+  if(!s.blocks.some(b=>b.items.length))h+=`<p class="pr-empty">Sesión sin ejercicios.</p>`;
+  return h+`<footer class="pr-f">Basket Lover · ${fmtDay(TODAY)}</footer>`}
+ACT['sd-print']=()=>{const s=SD;if(!s)return;if(window.claude){toast('Para el PDF, usa la app nueva (daviddeteresablanco-arch.github.io/basket-lover)');return}
+  let el=$('#print-root');if(!el){el=document.createElement('div');el.id='print-root';document.body.appendChild(el)}el.innerHTML=sesPrintHTML(s);el.className='pr-ses';
+  document.body.classList.add('printing');const old=document.title;document.title=`Entrenamiento ${s.date}${S.settings.category?' '+S.settings.category:''}`;
+  const done=()=>{document.body.classList.remove('printing');document.title=old;window.removeEventListener('afterprint',done)};window.addEventListener('afterprint',done);setTimeout(()=>{try{window.print()}catch(e){done()}},120)};
+{const _ss2=sessionSheet;sessionSheet=function(){const h=_ss2();if(!SD||SD.blocks.every(b=>!b.items.length))return h;return h.replace('<div class="sheet-foot">','<div class="sheet-foot"><button class="btn" data-act="sd-print">📄 PDF</button>')}}
 
 /* ---------- APP: copia de seguridad, almacenamiento persistente y modo sin conexión ---------- */
 ACT['bk-export']=()=>{try{const blob=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='basket-lover-copia-'+TODAY+'.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);toast('Copia descargada')}catch(e){toast('No se ha podido descargar la copia')}};
