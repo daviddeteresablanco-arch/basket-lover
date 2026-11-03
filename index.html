@@ -237,6 +237,7 @@ label.f{display:flex;flex-direction:column;gap:5px;font-size:12.5px;font-weight:
 .b-arw line,.b-arw polyline{fill:none;stroke:var(--board-ink);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
 .b-arw .b-dash{stroke-dasharray:9 7}
 .b-arw .b-bar{stroke-width:5}
+.b-arw .b-shot{stroke-dasharray:1 9;stroke-width:5}
 .b-head{fill:var(--board-ink)}
 .b-prev{opacity:.55}
 .tk-a{fill:var(--accent);stroke:var(--court);stroke-width:2.5}
@@ -577,6 +578,7 @@ body.v-big .vtip{background:#e8eef3;color:#05080b}
 .ph-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border:1.5px dashed var(--accent);border-radius:10px}.ph-bar input[type=range]{width:120px}
 .pf-bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.pf-new{display:inline-flex;gap:4px;align-items:center}.pf-new input{width:200px;max-width:60vw}.pf-add{border-style:dashed}.pf-mv{padding:0 10px 10px}.pf-mv select{width:100%;font-size:12.5px;padding:4px 6px}
 .bk-b{all:unset;cursor:pointer;min-width:26px;height:26px;text-align:center;border-radius:6px;color:var(--muted);font-size:14px}.bk-b:hover{background:var(--line)}.bk-add{display:flex;flex-direction:column;gap:6px;padding:4px 0}
+.item-water{background:color-mix(in srgb,var(--blue) 7%,transparent)}
 </style>
 </head>
 <body>
@@ -782,11 +784,12 @@ const TOOLS=[
   ['pase','Pase','<path d="M4 18L17 7" stroke-dasharray="3 3"/><path d="M12 6.5h6v6" stroke-linejoin="round"/>'],
   ['bote','Bote','<path d="M3 17l2.5-3 1.5 3 2.5-3 1.5 3 2.5-3 1.5 3L17 11"/><path d="M13 10h5v5" stroke-linejoin="round"/>'],
   ['bloqueo','Bloqueo','<path d="M4 18L15 9"/><path d="M11.5 5.5l7 7" stroke-width="2.8"/>'],
+  ['tiro','Tiro','<path d="M5 19L15 9" stroke-dasharray="1 3.2" stroke-width="2.6"/><circle cx="17.5" cy="6.5" r="3.2"/>'],
   ['texto','Texto','<path d="M5 6h14M12 6v13"/>'],
   ['borrar','Borrar','<path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/>'],
 ];
 const TOOL_HINT={texto:'Escribe el texto (por ejemplo «Opción 1») y toca la pista para colocarlo. Luego lo puedes mover con «Mover».',perfil:'Toca un jugador para marcar sus puntos fuertes y débiles (tirador, penetrador, poste…).',mover:'Arrastra jugadores, balones o conos. El balón se mueve con el jugador que lo lleva.',a:'Toca la pista para colocar un atacante.',d:'Toca la pista para colocar un defensor.',b:'Toca la pista para colocar un balón.',c:'Toca la pista para colocar un cono.',
-  corte:'Arrastra desde un jugador hasta donde corta.',pase:'Arrastra desde el jugador con balón hasta el receptor.',bote:'Arrastra desde el jugador con balón hasta donde bota.',bloqueo:'Arrastra desde el jugador que bloquea hasta el punto del bloqueo.',borrar:'Toca un elemento o una flecha para borrarlo.'};
+  corte:'Arrastra desde un jugador hasta donde corta.',pase:'Arrastra desde el jugador con balón hasta el receptor.',bote:'Arrastra desde el jugador con balón hasta donde bota.',bloqueo:'Arrastra desde el jugador que bloquea hasta el punto del bloqueo.',tiro:'Toca el jugador que tira (va solo a canasta) o arrastra desde él hasta donde quieras.',borrar:'Toca un elemento o una flecha para borrarlo.'};
 
 /* ---------- pizarra: dibujo ---------- */
 function courtSVG(full){const half=`<g class="b-lines"><rect x="170" y="0" width="160" height="190"/><circle cx="250" cy="190" r="60"/><path d="M30 0 L30 140 A237 237 0 0 0 470 140 L470 0"/><path d="M210 52 A40 40 0 0 0 290 52"/>${full?'':'<path d="M190 470 A60 60 0 0 1 310 470"/>'}<line x1="220" y1="40" x2="280" y2="40"/></g><circle cx="250" cy="52" r="8" class="b-hoop"/>`;
@@ -803,7 +806,7 @@ function arrowSVG(a,extra=''){
   let body;
   if(a.type==='bote'){const zl=Math.max(0,len-13),n=Math.max(2,Math.round(zl/11)),pts=[P2(sx,sy)];
     for(let i=1;i<n;i++){const t=i/n*zl,s=(i%2?1:-1)*6;pts.push(P2(sx+ux*t+nx*s,sy+uy*t+ny*s))}pts.push(P2(hx,hy));body=`<polyline points="${pts.join(' ')}"/>`}
-  else body=`<line${a.type==='pase'?' class="b-dash"':''} x1="${sx.toFixed(1)}" y1="${sy.toFixed(1)}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}"/>`;
+  else body=`<line${a.type==='pase'?' class="b-dash"':a.type==='tiro'?' class="b-shot"':''} x1="${sx.toFixed(1)}" y1="${sy.toFixed(1)}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}"/>`;
   return `<g class="b-arw ${extra}">${body}${head}</g>`;
 }
 function roleLabel(r){if(!r)return"";return r.fuertes&&r.fuertes[0]||r.name||r.debiles&&r.debiles[0]||""}
@@ -1058,13 +1061,15 @@ function sessionSheet(){const s=SD;const total=sessTotal(s);const diff=s.duratio
   h+=`<div class="stack" style="gap:6px"><div class="row between small"><b class="num">${total} de ${s.duration} min</b><span class="${diff<0?'':'muted'}" style="${diff<0?'color:var(--bad);font-weight:600':''}">${diff>0?`Quedan ${diff} min libres`:diff<0?`Te pasas ${-diff} min`:'Cuadra justo'}</span></div><div class="bar ${diff<0?'over':diff===0?'full':''}"><i style="width:${pct}%"></i></div></div>`;
   s.blocks.forEach((b,bi)=>{const sub=b.items.reduce((a,i)=>a+(+i.min||0),0);
     h+=`<div class="block"><div class="block-h"><b>${esc(b.name)}</b><span class="row" style="gap:2px"><span class="small muted num" style="margin-right:6px">${sub} min</span>${bi>0?`<button class="bk-b" data-act="bk-mv" data-b="${bi}" data-d="-1" aria-label="Subir bloque">↑</button>`:''}${bi<s.blocks.length-1?`<button class="bk-b" data-act="bk-mv" data-b="${bi}" data-d="1" aria-label="Bajar bloque">↓</button>`:''}<button class="bk-b" data-act="bk-rm" data-b="${bi}" aria-label="Quitar bloque">${BK.del===bi?'¿Quitar?':'×'}</button></span></div><div class="items">`;
-    b.items.forEach((it,ii)=>{const e=exById(it.exId);const opts=[...mObjs];const lo=it.objId&&objById(it.objId);if(lo&&!opts.includes(lo))opts.push(lo);
+    b.items.forEach((it,ii)=>{if(it.water){h+=`<div class="item item-water"><div class="item-main"><b>💧 Agua</b><span class="small muted">Pausa para beber</span></div>
+      <div class="stepper"><button data-act="it-min" data-b="${bi}" data-i="${ii}" data-d="-1" aria-label="Menos minutos">−</button><span>${it.min}′</span><button data-act="it-min" data-b="${bi}" data-i="${ii}" data-d="1" aria-label="Más minutos">+</button></div>
+      <button class="x" data-act="it-rm" data-b="${bi}" data-i="${ii}" aria-label="Quitar">×</button></div>`;return}const e=exById(it.exId);const opts=[...mObjs];const lo=it.objId&&objById(it.objId);if(lo&&!opts.includes(lo))opts.push(lo);
       h+=`<div class="item"><div class="item-main"><b>${e?esc(e.name):'Ejercicio borrado'}</b><select data-chg="it-obj" data-b="${bi}" data-i="${ii}" aria-label="Objetivo">
       <option value="">Sin objetivo</option>${opts.map(o=>`<option value="${o.id}" ${o.id===it.objId?'selected':''}>🎯 ${esc(o.title)}</option>`).join('')}</select></div>
       <div class="stepper"><button data-act="it-min" data-b="${bi}" data-i="${ii}" data-d="-5" aria-label="Menos minutos">−</button><span>${it.min}′</span><button data-act="it-min" data-b="${bi}" data-i="${ii}" data-d="5" aria-label="Más minutos">+</button></div>
       <button class="x" data-act="it-rm" data-b="${bi}" data-i="${ii}" aria-label="Quitar">×</button></div>`});
     h+=`</div>${pickerFor===bi?`<div class="picker"><div class="row between"><b class="small">Añadir a ${esc(b.name).toLowerCase()}</b><button class="btn btn-ghost btn-s" data-act="pick-close">Cerrar</button></div><input type="search" id="pick-q" data-inp="pick-q" placeholder="Buscar ejercicio o etiqueta" value="${esc(pickQ)}"><div class="pick-list" id="pick-list">${pickListHTML()}</div></div>`
-      :`<div class="add-row"><button class="btn btn-ghost btn-s" data-act="pick-open" data-b="${bi}" style="color:var(--blue)">+ Añadir ejercicio</button></div>`}</div>`});
+      :`<div class="add-row"><button class="btn btn-ghost btn-s" data-act="pick-open" data-b="${bi}" style="color:var(--blue)">+ Añadir ejercicio</button><button class="btn btn-ghost btn-s" data-act="it-water" data-b="${bi}" style="color:var(--blue)">💧 Agua</button></div>`}</div>`});
   h+=bkAddHTML(s);
   if(mObjs.length){h+=`<div class="stack" style="gap:6px"><div class="eyebrow">Objetivos de ${monthName(monthKey(s.date))} en esta sesión</div>${mObjs.map(o=>{const mm=s.blocks.reduce((a,b)=>a+b.items.filter(i=>i.objId===o.id).reduce((x,i)=>x+i.min,0),0);
     return `<div class="row between small"><span>${esc(o.title)}</span><b class="num" style="${mm?'':'color:var(--muted)'}">${mm} min</b></div>`}).join('')}</div>`}
@@ -1075,7 +1080,8 @@ CHG['sd-time']=el=>{SD.time=el.value;renderSheet()};
 INP['sd-goal']=el=>{SD.goal=el.value};
 CHG['sd-dur']=el=>{SD.duration=+el.value;renderSheet()};
 CHG['it-obj']=el=>{SD.blocks[+el.dataset.b].items[+el.dataset.i].objId=el.value||null;renderSheet()};
-ACT['it-min']=el=>{const it=SD.blocks[+el.dataset.b].items[+el.dataset.i];it.min=Math.max(5,it.min+ +el.dataset.d);renderSheet()};
+ACT['it-min']=el=>{const it=SD.blocks[+el.dataset.b].items[+el.dataset.i];it.min=Math.max(it.water?1:5,it.min+ +el.dataset.d);renderSheet()};
+ACT['it-water']=el=>{SD.blocks[+el.dataset.b].items.push({id:uid(),water:true,min:2});renderSheet();toast('Pausa de agua añadida (2 min)')};
 ACT['it-rm']=el=>{SD.blocks[+el.dataset.b].items.splice(+el.dataset.i,1);renderSheet()};
 ACT['pick-open']=el=>{pickerFor=+el.dataset.b;pickQ='';renderSheet()};
 ACT['pick-close']=()=>{pickerFor=null;renderSheet()};
@@ -1206,7 +1212,7 @@ const autoSaves=()=>!!PZ.edit;
 function notesHTML(){const f=pzF();
   return `${PZ.mode==='play'?rosterHTML():''}<div class="row between"><div class="eyebrow">${PZ.mode==='ex'?'Notas del ejercicio':'Bloc de notas de la jugada'}</div><span class="small muted" id="pz-saved">${autoSaves()?'Se guarda solo':'Se guarda al pulsar Guardar'}</span></div>
   ${noteFields().map(([k,l,ph,ic])=>`<label class="note-f nf-${ic}"><span class="nl">${NOTE_ICON[ic]}${l}</span><textarea rows="4" data-inp="pz-note" data-k="${k}" placeholder="${esc(ph)}">${esc(PZ.notes[k]||'')}</textarea></label>`).join('')}
-  <hr class="sep"><label class="note-f"><span class="nl" id="pz-stepnote-l">Nota del paso ${PZ.fi+1}</span><textarea rows="2" id="pz-stepnote" data-inp="pz-stepnote" placeholder="Qué pasa en este paso: lectura, opción, señal…">${esc(f.note||'')}</textarea></label><hr class="sep">${clipsHTML('pz',PZ.clips||(PZ.clips=[]))}`}
+  <hr class="sep"><label class="note-f"><span class="nl" id="pz-stepname-l">Nombre del paso ${PZ.fi+1}</span><input type="text" id="pz-stepname" data-inp="pz-stepname" value="${esc(f.name||'')}" placeholder="Ej.: Entrada, Bloqueo directo, Lectura del 5…" maxlength="40"></label><label class="note-f"><span class="nl" id="pz-stepnote-l">Nota del paso ${PZ.fi+1}</span><textarea rows="2" id="pz-stepnote" data-inp="pz-stepnote" placeholder="Qué pasa en este paso: lectura, opción, señal…">${esc(f.note||'')}</textarea></label><hr class="sep">${clipsHTML('pz',PZ.clips||(PZ.clips=[]))}`}
 const FUERTES=['Tirador','Penetrador','Pasador','Poste','Reboteador','Rápido','Físico','Zurdo','Buen defensor'];
 const DEBILES=['Mano débil','Mal tirador','Mal tirador libre','Pierde balones bajo presión','Lento','Defiende mal el 1x1'];
 const SUG={
@@ -1256,7 +1262,7 @@ ACT['rd-save']=()=>{PZ.board.roles=PZ.board.roles||{};if(!RD.name.trim()&&!RD.fu
   else PZ.board.roles[RD.id]={name:RD.name.trim(),fuertes:RD.fuertes,debiles:RD.debiles};persistRoles();closeSheet();drawBoard();refreshNotes();toast('Perfil guardado')};
 ACT['rd-del']=()=>{if(PZ.board.roles)delete PZ.board.roles[RD.id];persistRoles();closeSheet();drawBoard();refreshNotes();toast('Perfil quitado')};
 ACT['role-open']=el=>openRole(el.dataset.id);
-function refreshStepNote(){const t=$('#pz-stepnote'),l=$('#pz-stepnote-l');if(t){t.value=pzF().note||'';l.textContent='Nota del paso '+(PZ.fi+1)}}
+function refreshStepNote(){const t=$('#pz-stepnote'),l=$('#pz-stepnote-l');if(t){t.value=pzF().note||'';l.textContent='Nota del paso '+(PZ.fi+1)}const n=$('#pz-stepname'),nl=$('#pz-stepname-l');if(n){n.value=pzF().name||'';nl.textContent='Nombre del paso '+(PZ.fi+1)}}
 VIEWS.pizarra=()=>{const ed=PZ.edit;const isEx=PZ.mode==='ex';const full=pzFull();const H=full?940:470;
   return `${PZ.scout&&scById(PZ.scout)?`<div class="edit-banner"><span>Jugada del rival · informe de ${esc(scById(PZ.scout).rival)}</span><button class="btn btn-s" data-act="sc-backrep">Volver al informe</button></div>`:''}${ed&&ed.type==='ex'?`<div class="edit-banner"><span>Dibujando el ejercicio «${esc(ed.name)}»</span><button class="btn btn-s" data-act="pz-cancel">Salir sin guardar</button></div>`:''}
   <div class="view-head"><div><div class="eyebrow">Pizarra${ed?(isEx?' · Ejercicio':' · '+esc(PZ.kind)):''}</div><h1>${ed?esc(ed.name):isEx?'Nuevo ejercicio':'Nueva jugada'}</h1></div><div class="row">${ed?`<button class="btn btn-s" data-act="pz-new">Nueva</button>`:''}<button class="btn btn-s" data-act="pz-img">Imagen</button><button class="btn btn-p" data-act="pz-save">${ed&&ed.type==='ex'?'Guardar en el ejercicio':isEx?'Guardar en la biblioteca':'Guardar'}</button></div></div>
@@ -1284,13 +1290,14 @@ function persistNotes(){if(!PZ.edit)return;clearTimeout(noteT);noteT=setTimeout(
   save();const s=$('#pz-saved');if(s){s.textContent='Notas guardadas ✓';setTimeout(()=>{if($('#pz-saved'))$('#pz-saved').textContent='Se guarda solo'},1500)}},500)}
 INP['pz-note']=el=>{PZ.notes[el.dataset.k]=el.value;persistNotes()};
 INP['pz-stepnote']=el=>{pzF().note=el.value;persistNotes()};
+INP['pz-stepname']=el=>{pzF().name=el.value;const c=document.querySelector('#pz-steps .count');if(c)c.textContent=`Paso ${PZ.fi+1} de ${PZ.board.frames.length}${el.value.trim()?' · '+el.value.trim():''}`;persistNotes()};
 ACT['pz-mode']=el=>{if(PZ.edit)return;PZ.mode=el.dataset.m;PZ.notes={};render()};
 CHG['pz-kind']=el=>{PZ.kind=el.value;if(PZ.edit&&PZ.edit.type==='play'){const p=S.plays.find(x=>x.id===PZ.edit.id);if(p){p.kind=el.value;save()}}render()};
 ACT['pz-court']=el=>{if(PZ.playing)return;pushHist();if(el.dataset.v==='full'){PZ.board.court='full'}
   else{varSync();if((PZ.board.vars&&PZ.board.vars.length?PZ.board.vars.flatMap(v=>v.frames):PZ.board.frames).some(f=>f.tokens.some(t=>t.y>470)||f.arrows.some(a=>a.y1>470||a.y2>470))){toast('Hay elementos en la otra mitad. Súbelos a esta mitad antes de pasar a media pista.');return}delete PZ.board.court}
   render()};
 function stepsHTML(){const n=PZ.board.frames.length;const dis=PZ.playing?'disabled':'';
-  return `<button class="btn btn-s" data-act="pz-undo" ${dis||(!(PZ.hist&&PZ.hist.length)?'disabled':'')} aria-label="Deshacer">↶ Deshacer</button><button class="btn btn-s" data-act="pz-prev" ${dis} aria-label="Paso anterior">‹</button><span class="count">Paso ${PZ.fi+1} de ${n}</span><button class="btn btn-s" data-act="pz-next" ${dis} aria-label="Paso siguiente">›</button>
+  return `<button class="btn btn-s" data-act="pz-undo" ${dis||(!(PZ.hist&&PZ.hist.length)?'disabled':'')} aria-label="Deshacer">↶ Deshacer</button><button class="btn btn-s" data-act="pz-prev" ${dis} aria-label="Paso anterior">‹</button><span class="count">Paso ${PZ.fi+1} de ${n}${(pzF().name||'').trim()?' · '+esc(pzF().name.trim()):''}</span><button class="btn btn-s" data-act="pz-next" ${dis} aria-label="Paso siguiente">›</button>
   <button class="btn btn-s btn-b" data-act="pz-add" ${dis}>+ Paso</button><button class="btn btn-s btn-p" data-act="pz-play" ${dis}>▶ Reproducir</button>
   ${PZ.fi>0?`<button class="btn btn-s" data-act="pz-delprev" ${dis}>Borrar paso anterior</button>`:''}${n>1?`<button class="btn btn-s" data-act="pz-delstep" ${dis}>Borrar este paso</button>`:''}<button class="btn btn-s btn-ghost" data-act="pz-clear" ${dis}>${PZ.confirmClear?'¿Borrar todo?':'Limpiar'}</button>`}
 function updateSteps(){updCounts();const s=$('#pz-steps');if(s)s.innerHTML=stepsHTML();refreshStepNote()}
@@ -1317,6 +1324,7 @@ function mountBoard(){const svg=$('#board');drawBoard();updateSteps();
       if(drag.ball){const b=f.tokens.find(x=>x.id===drag.ball);if(b){b.x=t.x+drag.bx;b.y=t.y+drag.by}}}
     else{drag.x2=p.x;drag.y2=p.y}drawBoard()});
   const end=()=>{if(!drag)return;const f=pzF();
+    if(drag.mode==='arrow'&&drag.type==='tiro'&&drag.from&&Math.hypot(drag.x2-drag.x1,drag.y2-drag.y1)<=18){const full=PZ.board.court==='full';const by=full&&drag.y1>470?888:52;drag.x2=250;drag.y2=by}
     if(drag.mode==='arrow'&&Math.hypot(drag.x2-drag.x1,drag.y2-drag.y1)>18){const a={id:uid(),type:drag.type,from:drag.from,to:null,x1:drag.x1,y1:drag.y1,x2:Math.round(drag.x2),y2:Math.round(drag.y2)};
       if(a.type==='pase'){const tg=hitTok(f,{x:a.x2,y:a.y2},30,t=>isPlayer(t)&&t.id!==a.from);if(tg){a.to=tg.id;a.x2=tg.x;a.y2=tg.y}}pushHist();f.arrows.push(a)}
     drag=null;drawBoard();updateSteps()};
@@ -1656,7 +1664,7 @@ ACT['pz-img']=async()=>{const svg=$('#board');if(!svg)return;try{
   const head=72,root=getComputedStyle(document.documentElement);const c=document.createElement('canvas');c.width=W;c.height=H+head;const x=c.getContext('2d');
   x.fillStyle=root.getPropertyValue('--surface').trim()||'#fff';x.fillRect(0,0,W,H+head);x.fillStyle=root.getPropertyValue('--ink').trim()||'#000';
   x.font='700 36px "Barlow Condensed", "Arial Narrow", sans-serif';x.fillText((PZ.edit&&PZ.edit.name)||(PZ.mode==='ex'?'Ejercicio':'Jugada'),24,48);
-  x.font='500 22px Barlow, Arial, sans-serif';x.textAlign='right';x.fillText(`Paso ${PZ.fi+1} de ${PZ.board.frames.length} · Basket Lover`,W-24,46);x.textAlign='left';x.drawImage(img,0,head,W,H);
+  x.font='500 22px Barlow, Arial, sans-serif';x.textAlign='right';x.fillText(`Paso ${PZ.fi+1} de ${PZ.board.frames.length}${(pzF().name||'').trim()?' · '+pzF().name.trim():''} · Basket Lover`,W-24,46);x.textAlign='left';x.drawImage(img,0,head,W,H);
   PZ._png=c;const url=c.toDataURL('image/png');
   openSheet(()=>`${sheetHead('Imagen de la pizarra','Paso '+(PZ.fi+1)+' de '+PZ.board.frames.length)}<img src="${url}" alt="Imagen de la pizarra" style="width:100%;border-radius:12px;border:1px solid var(--line)">
   <p class="small muted">Mantén pulsada la imagen (móvil) o haz clic derecho (ordenador) y elige «Guardar imagen». También puedes copiarla y pegarla en WhatsApp.</p><div class="sheet-foot"><button class="btn btn-p" data-act="pz-img-copy">Copiar imagen</button></div>`)}
@@ -2203,14 +2211,14 @@ ACT['pz-count']=el=>{if(PZ.playing)return;pushHist();const f=pzF();const k=el.da
 function varsHTML(){const b=PZ.board;const vs=b.vars&&b.vars.length?b.vars:[{name:'Opción 1'}];const vi=b.vars?b.vi||0:0;
   return `<div class="row between" style="align-items:center"><div class="chips">${vs.map((v,i)=>`<button class="chip ${i===vi?'on':''}" data-act="pz-var" data-i="${i}" ${PZ.playing?'disabled':''}>${esc(v.name||'Opción '+(i+1))}</button>`).join('')}
   <button class="chip" data-act="pz-var-add" ${PZ.playing?'disabled':''} title="Copia la jugada hasta este paso para dibujar otra opción">+ Variante desde este paso</button></div></div>
-  ${b.vars&&b.vars.length>1?`<div class="row" style="gap:6px"><input type="text" id="pz-vname" data-inp="pz-vname" value="${esc(b.vars[vi].name||'')}" placeholder="Nombre de la variante" style="max-width:260px" aria-label="Nombre de la variante"><button class="btn btn-s btn-danger btn-ghost" data-act="pz-var-del">${PZ.confVar?'¿Seguro? Borrar':'Borrar variante'}</button></div>`:''}`}
+  <div class="row" style="gap:6px"><input type="text" id="pz-vname" data-inp="pz-vname" value="${esc(b.vars&&b.vars.length?b.vars[vi].name||'':'')}" placeholder="Nombre de la variante (ej.: Opción 1)" style="max-width:260px" aria-label="Nombre de la variante" maxlength="40">${b.vars&&b.vars.length>1?`<button class="btn btn-s btn-danger btn-ghost" data-act="pz-var-del">${PZ.confVar?'¿Seguro? Borrar':'Borrar variante'}</button>`:''}</div>`}
 function updVars(){const el=$('#pz-vars');if(el)el.innerHTML=varsHTML()}
 ACT['pz-var']=el=>{const b=PZ.board;if(!b.vars)return;varSync();b.vi=+el.dataset.i;b.frames=b.vars[b.vi].frames;PZ.fi=0;PZ.confVar=false;drawBoard();updateSteps();updVars();refreshNotes()};
 ACT['pz-var-add']=()=>{pushHist();const b=PZ.board;if(!b.vars||!b.vars.length){b.vars=[{id:uid(),name:'Opción 1',frames:b.frames}];b.vi=0}varSync();
   const base=clone(b.frames.slice(0,PZ.fi+1)).map(f=>({...f,arrows:[]}));base[base.length-1].arrows=[];base.forEach((f,i)=>{if(i<base.length-1)f.arrows=clone(b.frames[i].arrows)});
   const v={id:uid(),name:'Opción '+(b.vars.length+1),frames:base};b.vars.push(v);b.vi=b.vars.length-1;b.frames=v.frames;PZ.fi=base.length-1;
   drawBoard();updateSteps();updVars();refreshNotes();toast(`${v.name}: dibuja aquí la otra opción desde el paso ${PZ.fi+1}`);setTimeout(()=>{const i=$('#pz-vname');if(i){i.focus();i.select()}},40)};
-INP['pz-vname']=el=>{const b=PZ.board;if(!b.vars)return;b.vars[b.vi].name=el.value;const c=document.querySelectorAll('[data-act=pz-var]')[b.vi];if(c)c.textContent=el.value||'Opción '+(b.vi+1);persistNotes()};
+INP['pz-vname']=el=>{const b=PZ.board;if(!b.vars||!b.vars.length){b.vars=[{id:uid(),name:'',frames:b.frames}];b.vi=0}b.vars[b.vi].name=el.value;const c=document.querySelectorAll('[data-act=pz-var]')[b.vi];if(c)c.textContent=el.value||'Opción '+(b.vi+1);persistNotes()};
 ACT['pz-var-del']=()=>{const b=PZ.board;if(!b.vars||b.vars.length<2)return;if(!PZ.confVar){PZ.confVar=true;updVars();return}PZ.confVar=false;pushHist();b.vars.splice(b.vi,1);b.vi=Math.max(0,b.vi-1);b.frames=b.vars[b.vi].frames;PZ.fi=0;drawBoard();updateSteps();updVars();refreshNotes();toast('Variante borrada')};
 /* texto sobre la pista */
 INP['pz-txt']=el=>{PZ.txt=el.value};
@@ -2981,7 +2989,7 @@ function phToBoard(R){const full=R.court==='full';const W=500,H=full?940:470;con
   (R.cones||[]).forEach((c,i)=>tokens.push(T('c'+(i+1),'c','',Math.round(cl(c.x)*W),Math.round(cl(c.y)*H))));
   const near=(x,y,max)=>{let b=null,bd=max;for(const t of tokens){if(t.k==='c'||t.k==='b')continue;const d=Math.hypot(t.x-x,t.y-y);if(d<bd){bd=d;b=t}}return b};
   const specs=[];let skipped=0;(R.arrows||[]).forEach(a=>{const fx=cl(a.from&&a.from.x)*W,fy=cl(a.from&&a.from.y)*H,tx=Math.round(cl(a.to&&a.to.x)*W),ty=Math.round(cl(a.to&&a.to.y)*H);const s=near(fx,fy,full?90:70);if(!s){skipped++;return}
-    const kind=['corte','pase','bote','bloqueo'].includes(a.type)?a.type:'corte';const tgt=kind==='pase'?near(tx,ty,full?80:60):null;specs.push(tgt&&tgt!==s?[kind,s.id,0,0,tgt.id]:[kind,s.id,tx,ty])});
+    const kind=['corte','pase','bote','bloqueo','tiro'].includes(a.type)?a.type:'corte';const tgt=kind==='pase'?near(tx,ty,full?80:60):null;specs.push(tgt&&tgt!==s?[kind,s.id,0,0,tgt.id]:[kind,s.id,tx,ty])});
   const b=BD(tokens,specs);if(full)b.court='full';return {b,skipped,n:tokens.length,na:specs.length}}
 ACT['ph-ai']=async()=>{if(!PH.url)return;if(!SB.cli||!SB.user){toast('Para reconocerla automáticamente, entra con tu cuenta (pulsa la nube de arriba)');return}if(PH.busy)return;
   PH.busy=true;render();try{const image=await phImageB64(PH.url);const {data:ses}=await SB.cli.auth.getSession();const tok=ses&&ses.session&&ses.session.access_token;if(!tok)throw new Error('Entra con tu cuenta');
